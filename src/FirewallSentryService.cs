@@ -164,11 +164,12 @@ namespace MinimalFirewall
                     continue;
                 }
 
-                // Look up single rule safely (COM throws exceptions if rule is missing/deleted quickly)
-                NetFwTypeLib.INetFwRule2? comRule = null;
+                // Look up single rule safely (COM throws exceptions if rule is missing/deleted quickly).
+                // The handle owns the COM lifetime, so every path below releases it exactly once.
+                FirewallRuleHandle? ruleHandle = null;
                 try
                 {
-                    comRule = FirewallRuleService.GetRuleByName(changeEvent.Name);
+                    ruleHandle = FirewallRuleService.GetRuleHandleByName(changeEvent.Name);
                 }
                 catch (FileNotFoundException)
                 {
@@ -179,11 +180,11 @@ namespace MinimalFirewall
                     System.Diagnostics.Debug.WriteLine($"[SENTRY ERROR] COM Lookup failed for {changeEvent.Name}: {ex.Message}");
                 }
 
-                if (comRule != null)
+                if (ruleHandle != null)
                 {
                     try
                     {
-                        var ruleVm = FirewallDataService.CreateAdvancedRuleViewModel(comRule);
+                        var ruleVm = FirewallDataService.CreateAdvancedRuleViewModel(ruleHandle.Rule);
                         var changeObj = new FirewallRuleChange
                         {
                             Type = changeEvent.Type,
@@ -195,7 +196,7 @@ namespace MinimalFirewall
                     }
                     finally
                     {
-                        Marshal.ReleaseComObject(comRule);
+                        ruleHandle.Dispose();
                     }
                 }
                 else if (changeEvent.Type != ChangeType.Deleted)

@@ -141,7 +141,11 @@ namespace MinimalFirewall
             _firewallSentryService = new FirewallSentryService(_firewallRuleService);
             var trafficMonitorViewModel = new TrafficMonitorViewModel();
 
-            _eventListenerService = new FirewallEventListenerService(_dataService, _wildcardRuleService, () => MainViewModel.IsLockedDown, msg => _activityLogger.LogDebug(msg), _appSettings, _whitelistService);
+            // Fail closed on an unreadable policy: if the lockdown state cannot be determined we
+            // keep reporting blocked connections rather than silently going quiet, which is what
+            // treating "unknown" as "not locked down" would do.
+            _eventListenerService = new FirewallEventListenerService(_dataService, _wildcardRuleService, () => MainViewModel.LockdownState != FirewallPolicyState.Allow, msg => _activityLogger.LogDebug(msg), _appSettings, _whitelistService);
+            _eventListenerService.StartupFailed += OnEventListenerStartupFailed;
 
             _actionsService = new FirewallActionsService(_firewallRuleService, _activityLogger, _eventListenerService, _firewallSentryService, _whitelistService, _wildcardRuleService, _dataService);
             _eventListenerService.ActionsService = _actionsService;
@@ -1415,6 +1419,22 @@ namespace MinimalFirewall
             {
                 DismissAllPopups();
             }
+        }
+
+        private void OnEventListenerStartupFailed(string message)
+        {
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action<string>(OnEventListenerStartupFailed), message);
+                return;
+            }
+
+            MessageBox.Show(this, message, "Firewall Event Listener", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
 
         private void DismissAllPopups()

@@ -163,7 +163,17 @@ namespace MinimalFirewall
             return matchedNames;
         }
 
-        public static INetFwRule2? GetRuleByName(string name)
+        /// <summary>
+        /// Looks up a rule and hands back a disposable handle, so the caller cannot forget the
+        /// matching release. Prefer this over letting a raw COM interface escape the service.
+        /// </summary>
+        public static FirewallRuleHandle? GetRuleHandleByName(string name)
+        {
+            INetFwRule2? rule = GetRuleByName(name);
+            return rule == null ? null : new FirewallRuleHandle(rule);
+        }
+
+        private static INetFwRule2? GetRuleByName(string name)
         {
             INetFwPolicy2 firewallPolicy = GetLocalPolicy();
             if (firewallPolicy == null)
@@ -204,35 +214,169 @@ namespace MinimalFirewall
             }
         }
 
-        public static void SetDefaultOutboundAction(NET_FW_ACTION_ action)
+        private static readonly NET_FW_PROFILE_TYPE2_[] AllProfiles =
+        [
+            NET_FW_PROFILE_TYPE2_.NET_FW_PROFILE2_DOMAIN,
+            NET_FW_PROFILE_TYPE2_.NET_FW_PROFILE2_PRIVATE,
+            NET_FW_PROFILE_TYPE2_.NET_FW_PROFILE2_PUBLIC
+        ];
+
+        private static string DescribeComError(COMException ex)
         {
-            INetFwPolicy2 firewallPolicy = GetLocalPolicy();
-            if (firewallPolicy == null)
+            return ex.HResult == E_ACCESSDENIED
+                ? "Access denied - administrator privileges are required."
+                : $"HResult 0x{ex.HResult:X8}: {ex.Message}";
+        }
+
+        /// <summary>
+        /// Applies <paramref name="action"/> to every firewall profile as one unit: each write is
+        /// read back to confirm it took effect, and if any profile fails the profiles that already
+        /// changed are restored to their previous action. A partial application is reported as a
+        /// failure, so a caller can never tell the user they are protected when only some profiles
+        /// were actually updated.
+        /// </summary>
+        public static SetDefaultOutboundActionResult SetDefaultOutboundAction(NET_FW_ACTION_ action)
+        {
+            INetFwPolicy2? firewallPolicy;
+            try
             {
-                return;
+                firewallPolicy = GetLocalPolicy();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ERROR] SetDefaultOutboundAction: Could not open firewall policy. {ex.Message}");
+                return new SetDefaultOutboundActionResult { RequestedAction = action, PolicyUnavailable = true };
             }
 
-            foreach (NET_FW_PROFILE_TYPE2_ profile in new[]
+            if (firewallPolicy == null)
             {
-                NET_FW_PROFILE_TYPE2_.NET_FW_PROFILE2_DOMAIN,
-                NET_FW_PROFILE_TYPE2_.NET_FW_PROFILE2_PRIVATE,
-                NET_FW_PROFILE_TYPE2_.NET_FW_PROFILE2_PUBLIC
-            })
+                return new SetDefaultOutboundActionResult { RequestedAction = action, PolicyUnavailable = true };
+            }
+
+            var results = new List<ProfileActionResult>();
+            var changed = new List<(NET_FW_PROFILE_TYPE2_ Profile, NET_FW_ACTION_ Previous)>();
+
+            try
             {
-                try
+                foreach (NET_FW_PROFILE_TYPE2_ profile in AllProfiles)
                 {
-                    firewallPolicy.set_DefaultOutboundAction(profile, action);
-                }
-                catch (COMException ex)
-                {
-                    Debug.WriteLine($"[ERROR] SetDefaultOutboundAction ({profile}): Failed. HResult: 0x{ex.HResult:X8}. Message: {ex.Message}");
-                    if (ex.HResult == E_ACCESSDENIED)
+                    NET_FW_ACTION_ previous;
+                    try
                     {
-                        Debug.WriteLine("[ERROR] SetDefaultOutboundAction: Access Denied. Ensure the application is running with administrator privileges.");
+                        previous = firewallPolicy.DefaultOutboundAction[profile];
+                    }
+                    catch (COMException ex)
+                    {
+                        Debug.WriteLine($"[ERROR] SetDefaultOutboundAction ({profile}): Could not read current action. HResult: 0x{ex.HResult:X8}.");
+                        results.Add(new ProfileActionResult
+                        {
+                            Profile = profile,
+                            Succeeded = false,
+                            Error = DescribeComError(ex)
+                        });
+                        continue;
+                    }
+
+                    if (previous == action)
+                    {
+                        // Already correct: nothing was applied, so there is nothing to roll back here.
+                        results.Add(new ProfileActionResult
+                        {
+                            Profile = profile,
+                            Succeeded = true,
+                            PreviousAction = previous
+                        });
+                        continue;
+                    }
+
+                    try
+                    {
+                        firewallPolicy.set_DefaultOutboundAction(profile, action);
+                    }
+                    catch (COMException ex)
+                    {
+                        Debug.WriteLine($"[ERROR] SetDefaultOutboundAction ({profile}): Failed. HResult: 0x{ex.HResult:X8}. Message: {ex.Message}");
+                        results.Add(new ProfileActionResult
+                        {
+                            Profile = profile,
+                            Succeeded = false,
+                            PreviousAction = previous,
+                            Error = DescribeComError(ex)
+                        });
+                        continue;
+                    }
+
+                    // Read the value back. A write that silently does not stick (Group Policy
+                    // override, for example) is indistinguishable from success without this.
+                    NET_FW_ACTION_ verified;
+                    try
+                    {
+                        verified = firewallPolicy.DefaultOutboundAction[profile];
+                    }
+                    catch (COMException ex)
+                    {
+                        changed.Add((profile, previous));
+                        results.Add(new ProfileActionResult
+                        {
+                            Profile = profile,
+                            Succeeded = false,
+                            PreviousAction = previous,
+                            Error = $"Could not verify the change: {DescribeComError(ex)}"
+                        });
+                        continue;
+                    }
+
+                    if (verified != action)
+                    {
+                        results.Add(new ProfileActionResult
+                        {
+                            Profile = profile,
+                            Succeeded = false,
+                            PreviousAction = previous,
+                            Error = "The policy did not retain the requested action (it may be overridden by Group Policy)."
+                        });
+                        continue;
+                    }
+
+                    changed.Add((profile, previous));
+                    results.Add(new ProfileActionResult
+                    {
+                        Profile = profile,
+                        Succeeded = true,
+                        PreviousAction = previous
+                    });
+                }
+
+                bool anyFailed = results.Exists(r => !r.Succeeded);
+                bool rolledBack = false;
+                bool rollbackIncomplete = false;
+
+                if (anyFailed && changed.Count > 0)
+                {
+                    rolledBack = true;
+                    foreach (var (profile, previous) in changed)
+                    {
+                        try
+                        {
+                            firewallPolicy.set_DefaultOutboundAction(profile, previous);
+                        }
+                        catch (COMException ex)
+                        {
+                            rollbackIncomplete = true;
+                            Debug.WriteLine($"[ERROR] SetDefaultOutboundAction rollback ({profile}): Failed. HResult: 0x{ex.HResult:X8}. Message: {ex.Message}");
+                        }
                     }
                 }
+
+                return new SetDefaultOutboundActionResult
+                {
+                    RequestedAction = action,
+                    Profiles = results,
+                    RolledBack = rolledBack,
+                    RollbackIncomplete = rollbackIncomplete
+                };
             }
-            if (firewallPolicy != null)
+            finally
             {
                 Marshal.ReleaseComObject(firewallPolicy);
             }
@@ -314,12 +458,45 @@ namespace MinimalFirewall
             return matchingRules;
         }
 
-        public static NET_FW_ACTION_ GetDefaultOutboundAction()
+        /// <summary>
+        /// Reads the default outbound action of the active profile as a tri-state.
+        /// Returns <see cref="FirewallPolicyState.Unknown"/> when the policy cannot be read;
+        /// callers must treat that as "state undetermined" and never as
+        /// <see cref="FirewallPolicyState.Allow"/>.
+        /// </summary>
+        public static FirewallPolicyState GetDefaultOutboundState()
         {
-            INetFwPolicy2 firewallPolicy = GetLocalPolicy();
+            NET_FW_ACTION_? action = TryGetDefaultOutboundAction();
+            if (action == null)
+            {
+                return FirewallPolicyState.Unknown;
+            }
+
+            return action.Value == NET_FW_ACTION_.NET_FW_ACTION_BLOCK
+                ? FirewallPolicyState.Block
+                : FirewallPolicyState.Allow;
+        }
+
+        /// <summary>
+        /// Returns the default outbound action of the currently active profile, or null when the
+        /// firewall policy could not be read. Never substitutes a value for an unreadable policy.
+        /// </summary>
+        public static NET_FW_ACTION_? TryGetDefaultOutboundAction()
+        {
+            INetFwPolicy2? firewallPolicy;
+            try
+            {
+                firewallPolicy = GetLocalPolicy();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ERROR] TryGetDefaultOutboundAction: Could not open firewall policy. {ex.Message}");
+                return null;
+            }
+
             if (firewallPolicy == null)
             {
-                return NET_FW_ACTION_.NET_FW_ACTION_ALLOW;
+                return null;
             }
 
             try
@@ -337,20 +514,18 @@ namespace MinimalFirewall
                 {
                     return firewallPolicy.DefaultOutboundAction[NET_FW_PROFILE_TYPE2_.NET_FW_PROFILE2_DOMAIN];
                 }
-                Debug.WriteLine("[WARN] GetDefaultOutboundAction: No specific profile type identified as active. Falling back to Public.");
+
+                Debug.WriteLine("[WARN] TryGetDefaultOutboundAction: No specific profile type identified as active. Falling back to Public.");
                 return firewallPolicy.DefaultOutboundAction[NET_FW_PROFILE_TYPE2_.NET_FW_PROFILE2_PUBLIC];
             }
             catch (COMException ex)
             {
-                Debug.WriteLine($"[ERROR] GetDefaultOutboundAction: Failed. HResult: 0x{ex.HResult:X8}. Message: {ex.Message}");
-                return NET_FW_ACTION_.NET_FW_ACTION_ALLOW;
+                Debug.WriteLine($"[ERROR] TryGetDefaultOutboundAction: Failed. HResult: 0x{ex.HResult:X8}. Message: {ex.Message}");
+                return null;
             }
             finally
             {
-                if (firewallPolicy != null)
-                {
-                    Marshal.ReleaseComObject(firewallPolicy);
-                }
+                Marshal.ReleaseComObject(firewallPolicy);
             }
         }
 

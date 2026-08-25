@@ -3,6 +3,8 @@ using System.Diagnostics.Eventing.Reader;
 using System.IO;
 using System.Xml;
 using System.Collections.Concurrent;
+using System.Threading;
+using System.Threading.Channels;
 using MinimalFirewall.TypedObjects;
 using System.Collections.Generic;
 using System.Net;
@@ -42,8 +44,26 @@ namespace MinimalFirewall
         private EventLogWatcher? _eventWatcher;
         private readonly string _currentAssemblyName;
 
+        // Event 5157 fires for nearly every blocked packet while lockdown is active. Handing each
+        // one to Task.Run lets a burst spawn an unbounded number of thread-pool tasks before the
+        // de-duplication inside ProcessFirewallBlockEventAsync ever gets a chance to collapse them.
+        // A bounded queue with a single consumer caps that work instead.
+        private const int EventQueueCapacity = 256;
+        private Channel<FirewallBlockEventData>? _eventQueue;
+        private CancellationTokenSource? _processingCts;
+        private long _droppedEventCount;
+
+        private readonly record struct FirewallBlockEventData(string Xml, int? RawDirectionCode);
+
         public FirewallActionsService? ActionsService { get; set; }
         public event Action<PendingConnectionViewModel>? PendingConnectionDetected;
+
+        /// <summary>
+        /// Raised when the listener cannot start, typically because the Security log is not
+        /// readable without elevation. The service reports the condition and the UI layer decides
+        /// how to surface it, so this class stays testable without a message pump.
+        /// </summary>
+        public event Action<string>? StartupFailed;
 
         public FirewallEventListenerService(
             FirewallDataService dataService,
@@ -67,6 +87,12 @@ namespace MinimalFirewall
         {
             if (_eventWatcher != null)
             {
+                // Defensive: a live watcher with no consumer would silently discard every event.
+                if (_eventQueue == null)
+                {
+                    StartProcessingLoop();
+                }
+
                 if (!_eventWatcher.Enabled)
                 {
                     _eventWatcher.Enabled = true;
@@ -81,13 +107,26 @@ namespace MinimalFirewall
                 var query = new EventLogQuery(SecurityLogName, PathType.LogName, $"*[System[(EventID={BlockedConnectionEventId})]]");
                 _eventWatcher = new EventLogWatcher(query);
                 _eventWatcher.EventRecordWritten += OnEventRecordWritten;
+
+                StartProcessingLoop();
+
                 _eventWatcher.Enabled = true;
                 _logAction($"[EventListener] Event watcher started successfully (Listening for {BlockedConnectionEventId}).");
             }
             catch (EventLogException ex)
             {
                 _logAction($"[EventListener ERROR] Permission denied reading Security log: {ex.Message}");
-                MessageBox.Show("Could not start firewall event listener. Please run as Administrator.", "Permission Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+
+                // Unwind whatever was already started so a later retry begins from a clean state.
+                StopProcessingLoop();
+                if (_eventWatcher != null)
+                {
+                    _eventWatcher.EventRecordWritten -= OnEventRecordWritten;
+                    _eventWatcher.Dispose();
+                    _eventWatcher = null;
+                }
+
+                StartupFailed?.Invoke("Could not start the firewall event listener, so blocked connections will not be reported.\n\nPlease run Minimal Firewall as Administrator.");
             }
         }
 
@@ -101,6 +140,8 @@ namespace MinimalFirewall
                 _eventWatcher = null;
                 _logAction("[EventListener] Event watcher stopped and disposed.");
             }
+
+            StopProcessingLoop();
 
             // Release all locks so the next lockdown session is clean
             _pendingNotifications.Clear();
@@ -147,9 +188,96 @@ namespace MinimalFirewall
                     catch { /* Ignore cast errors, fall back to XML parsing */ }
                 }
 
-                Task.Run(async () => await ProcessFirewallBlockEventAsync(xmlContent, rawDirectionCode));
+                Channel<FirewallBlockEventData>? queue = _eventQueue;
+                if (queue == null)
+                {
+                    return;
+                }
+
+                if (!queue.Writer.TryWrite(new FirewallBlockEventData(xmlContent, rawDirectionCode)))
+                {
+                    // Queue is full. Under a burst the overflow is overwhelmingly repeats of
+                    // connections already queued, so dropping is preferable to unbounded growth.
+                    long dropped = Interlocked.Increment(ref _droppedEventCount);
+                    if (dropped == 1 || dropped % 100 == 0)
+                    {
+                        _logAction($"[EventListener] Event queue full - dropped {dropped} blocked-connection event(s) during a burst.");
+                    }
+                }
             }
             catch (EventLogException) { /* Ignore log read errors */ }
+        }
+
+        private void StartProcessingLoop()
+        {
+            StopProcessingLoop();
+
+            _processingCts = new CancellationTokenSource();
+            _eventQueue = Channel.CreateBounded<FirewallBlockEventData>(
+                new BoundedChannelOptions(EventQueueCapacity)
+                {
+                    // Wait mode combined with TryWrite (never WriteAsync) gives a non-blocking
+                    // write that reports the overflow: TryWrite returns false instead of silently
+                    // discarding, which the Drop* modes do. That keeps the drop counter honest.
+                    FullMode = BoundedChannelFullMode.Wait,
+                    SingleReader = true,
+                    SingleWriter = false
+                });
+            Interlocked.Exchange(ref _droppedEventCount, 0);
+
+            ChannelReader<FirewallBlockEventData> reader = _eventQueue.Reader;
+            CancellationToken token = _processingCts.Token;
+            _ = Task.Run(() => ConsumeEventsAsync(reader, token));
+        }
+
+        private async Task ConsumeEventsAsync(ChannelReader<FirewallBlockEventData> reader, CancellationToken token)
+        {
+            try
+            {
+                await foreach (FirewallBlockEventData blockEvent in reader.ReadAllAsync(token).ConfigureAwait(false))
+                {
+                    try
+                    {
+                        await ProcessFirewallBlockEventAsync(blockEvent.Xml, blockEvent.RawDirectionCode).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        // A single malformed or racing event must not tear down the consumer.
+                        _logAction($"[EventListener ERROR] Failed to process a blocked-connection event: {ex.Message}");
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Normal shutdown path.
+            }
+        }
+
+        private void StopProcessingLoop()
+        {
+            // Signal completion and cancellation, but never block here: Stop() runs on the UI
+            // thread and an in-flight event can be marshalling a notification back to it.
+            _eventQueue?.Writer.TryComplete();
+            _eventQueue = null;
+
+            CancellationTokenSource? cts = _processingCts;
+            _processingCts = null;
+
+            if (cts != null)
+            {
+                try
+                {
+                    cts.Cancel();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Already torn down.
+                }
+
+                // Deliberately not disposed here: the consumer may still be unwinding through a
+                // registration on this token, and disposing underneath it races. The source holds
+                // no timer or unmanaged handle, so letting it be collected is safe.
+            }
         }
 
         private async Task ProcessFirewallBlockEventAsync(string xmlContent, int? rawDirectionCode)

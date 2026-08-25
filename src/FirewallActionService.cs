@@ -379,13 +379,12 @@ namespace MinimalFirewall
         // Consolidated helper for System Rules (Crypto/DHCP)
         private void ManageSystemRule(string ruleName, string description, string applicationName, string serviceName, int protocol, string remotePorts, string localPorts, bool enable)
         {
-            INetFwRule2? rule = null;
             try
             {
-                rule = FirewallRuleService.GetRuleByName(ruleName);
+                using FirewallRuleHandle? handle = FirewallRuleService.GetRuleHandleByName(ruleName);
                 if (enable)
                 {
-                    if (rule == null)
+                    if (handle == null)
                     {
                         if (FwRuleType == null)
                         {
@@ -422,15 +421,15 @@ namespace MinimalFirewall
                         FirewallRuleService.CreateRule(newRule);
                         activityLogger.LogDebug($"Created system rule: {ruleName}");
                     }
-                    else if (!rule.Enabled)
+                    else if (!handle.Rule.Enabled)
                     {
-                        rule.Enabled = true;
+                        handle.Rule.Enabled = true;
                         activityLogger.LogDebug($"Enabled system rule: {ruleName}");
                     }
                 }
                 else
                 {
-                    if (rule != null)
+                    if (handle != null)
                     {
                         FirewallRuleService.DeleteRulesByName([ruleName]);
                         activityLogger.LogDebug($"Disabled/Deleted system rule: {ruleName}");
@@ -440,13 +439,6 @@ namespace MinimalFirewall
             catch (COMException ex)
             {
                 activityLogger.LogException($"ManageSystemRule '{ruleName}' (enable: {enable})", ex);
-            }
-            finally
-            {
-                if (rule != null)
-                {
-                    Marshal.ReleaseComObject(rule);
-                }
             }
         }
 
@@ -495,7 +487,20 @@ namespace MinimalFirewall
 
         public void ToggleLockdown()
         {
-            var isCurrentlyLocked = FirewallRuleService.GetDefaultOutboundAction() == NET_FW_ACTION_.NET_FW_ACTION_BLOCK;
+            var currentState = FirewallRuleService.GetDefaultOutboundState();
+            if (currentState == FirewallPolicyState.Unknown)
+            {
+                // Refuse to flip a policy we cannot read: toggling blind could just as easily
+                // remove protection as add it.
+                activityLogger.LogDebug("Toggle Lockdown aborted: the current firewall policy could not be read.");
+                SafeShowMessageBox(
+                    "The current Windows Firewall policy could not be read, so Lockdown was not changed.\n\n" +
+                    "Check that the Windows Firewall service is running and that Minimal Firewall is running as Administrator.",
+                    "Firewall State Unknown", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            var isCurrentlyLocked = currentState == FirewallPolicyState.Block;
             bool newLockdownState = !isCurrentlyLocked;
             activityLogger.LogDebug($"Toggling Lockdown. Current state: {(isCurrentlyLocked ? "Locked" : "Unlocked")}. New state: {(newLockdownState ? "Locked" : "Unlocked")}.");
             try
@@ -525,7 +530,14 @@ namespace MinimalFirewall
                      "Lockdown Mode Failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 try
                 {
-                    FirewallRuleService.SetDefaultOutboundAction(NET_FW_ACTION_.NET_FW_ACTION_ALLOW);
+                    var revertResult = FirewallRuleService.SetDefaultOutboundAction(NET_FW_ACTION_.NET_FW_ACTION_ALLOW);
+                    if (!revertResult.Succeeded)
+                    {
+                        activityLogger.LogDebug($"Failed to revert outbound policy to Allow after audit failure.\n{revertResult.BuildSummary()}");
+                        SafeShowMessageBox(
+                            "The firewall policy could not be set back to 'Allow'.\n\n" + revertResult.BuildSummary(),
+                            "Firewall Policy Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
                 }
                 catch (COMException ex)
                 {
@@ -537,8 +549,24 @@ namespace MinimalFirewall
 
             try
             {
-                FirewallRuleService.SetDefaultOutboundAction(
+                var applyResult = FirewallRuleService.SetDefaultOutboundAction(
                     newLockdownState ? NET_FW_ACTION_.NET_FW_ACTION_BLOCK : NET_FW_ACTION_.NET_FW_ACTION_ALLOW);
+
+                if (!applyResult.Succeeded)
+                {
+                    // A partial change is a failure: report exactly which profiles did not take,
+                    // instead of leaving the UI to imply the whole policy was applied.
+                    activityLogger.LogDebug($"Failed to change default outbound policy.\n{applyResult.BuildSummary()}");
+
+                    string message = applyResult.RollbackIncomplete
+                        ? "The default outbound policy could not be changed, and restoring the previous policy did not fully succeed.\n\n"
+                        : "The default outbound policy was not changed.\n\n";
+
+                    SafeShowMessageBox(
+                        message + applyResult.BuildSummary(),
+                        "Lockdown Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
             }
             catch (COMException ex)
             {

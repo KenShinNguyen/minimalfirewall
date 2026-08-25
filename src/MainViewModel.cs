@@ -90,7 +90,13 @@ namespace MinimalFirewall
             _dnsRefreshTimer = new System.Threading.Timer(async _ => await SafeRunDnsRefreshAsync(), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(dnsInterval));
         }
 
-        public static bool IsLockedDown => FirewallRuleService.GetDefaultOutboundAction() == NetFwTypeLib.NET_FW_ACTION_.NET_FW_ACTION_BLOCK;
+        /// <summary>
+        /// Tri-state lockdown status. <see cref="FirewallPolicyState.Unknown"/> means the policy
+        /// could not be read at all - it is not the same as "not locked down".
+        /// </summary>
+        public static FirewallPolicyState LockdownState => FirewallRuleService.GetDefaultOutboundState();
+
+        public static bool IsLockedDown => FirewallRuleService.GetDefaultOutboundState() == FirewallPolicyState.Block;
 
 
         public void ClearRulesCache()
