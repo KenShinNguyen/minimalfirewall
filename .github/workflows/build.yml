@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    name: Build (windows-latest)
+    name: Build and test (windows-latest)
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -28,3 +28,8 @@ jobs:
 
       - name: Build
         run: msbuild src/MinimalFirewall.sln /t:Build /p:Configuration=Release /p:Platform=x64
+
+      # The solution is built with MSBuild because of NetFwTypeLib. Reuse the
+      # already-built test assembly so dotnet test does not invoke dotnet build.
+      - name: Unit tests
+        run: dotnet test tests/MinimalFirewall.Tests/MinimalFirewall.Tests.csproj --no-build --no-restore --configuration Release --logger "console;verbosity=normal"
