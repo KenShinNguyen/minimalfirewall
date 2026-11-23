@@ -31,5 +31,7 @@ jobs:
 
       # The solution is built with MSBuild because of NetFwTypeLib. Reuse the
       # already-built test assembly so dotnet test does not invoke dotnet build.
+      # Keep the same x64 platform so dotnet test resolves the MSBuild output
+      # under bin\\x64\\Release.
       - name: Unit tests
-        run: dotnet test tests/MinimalFirewall.Tests/MinimalFirewall.Tests.csproj --no-build --no-restore --configuration Release --logger "console;verbosity=normal"
+        run: dotnet test tests/MinimalFirewall.Tests/MinimalFirewall.Tests.csproj --no-build --no-restore --configuration Release --property:Platform=x64 --logger "console;verbosity=normal"

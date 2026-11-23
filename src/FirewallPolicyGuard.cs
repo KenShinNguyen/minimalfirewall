@@ -34,13 +34,26 @@ public static class FirewallPolicyGuard
     {
         ArgumentNullException.ThrowIfNull(backend);
 
-        if (!TryGetToggleAction(backend.GetDefaultOutboundState(), out var targetAction))
+        try
         {
+            if (!TryGetToggleAction(backend.GetDefaultOutboundState(), out var targetAction))
+            {
+                result = null;
+                return false;
+            }
+
+            result = backend.SetDefaultOutboundAction(targetAction);
+            return result?.Succeeded == true;
+        }
+        catch (Exception ex)
+        {
+            // Lockdown toggling is fail-safe: a backend read/write failure must never
+            // be interpreted as a successful policy transition.
+            System.Diagnostics.Debug.WriteLine(
+                $"[ERROR] FirewallPolicyGuard.TryToggle: {ex.GetType().Name}: {ex.Message}");
+
             result = null;
             return false;
         }
-
-        result = backend.SetDefaultOutboundAction(targetAction);
-        return result.Succeeded;
     }
 }
