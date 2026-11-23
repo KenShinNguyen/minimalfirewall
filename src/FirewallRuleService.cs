@@ -235,8 +235,9 @@ namespace MinimalFirewall
         /// failure, so a caller can never tell the user they are protected when only some profiles
         /// were actually updated.
         /// </summary>
-        public static SetDefaultOutboundActionResult SetDefaultOutboundAction(NET_FW_ACTION_ action)
+        public static SetDefaultOutboundActionResult SetDefaultOutboundAction(FirewallOutboundAction action)
         {
+            var comAction = FirewallOutboundActionMapper.ToComAction(action);
             INetFwPolicy2? firewallPolicy;
             try
             {
@@ -277,21 +278,21 @@ namespace MinimalFirewall
                         continue;
                     }
 
-                    if (previous == action)
+                    if (previous == comAction)
                     {
                         // Already correct: nothing was applied, so there is nothing to roll back here.
                         results.Add(new ProfileActionResult
                         {
                             Profile = profile,
                             Succeeded = true,
-                            PreviousAction = previous
+                            PreviousAction = FirewallOutboundActionMapper.FromComAction(previous)
                         });
                         continue;
                     }
 
                     try
                     {
-                        firewallPolicy.set_DefaultOutboundAction(profile, action);
+                        firewallPolicy.set_DefaultOutboundAction(profile, comAction);
                     }
                     catch (COMException ex)
                     {
@@ -326,7 +327,7 @@ namespace MinimalFirewall
                         continue;
                     }
 
-                    if (verified != action)
+                    if (verified != comAction)
                     {
                         results.Add(new ProfileActionResult
                         {
