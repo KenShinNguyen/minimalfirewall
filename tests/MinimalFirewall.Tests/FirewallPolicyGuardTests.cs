@@ -52,7 +52,7 @@ public sealed class FirewallPolicyGuardTests
             FirewallPolicyState.Allow,
             new SetDefaultOutboundActionResult
             {
-                RequestedAction = NET_FW_ACTION_.NET_FW_ACTION_BLOCK
+                RequestedAction = FirewallOutboundAction.Block
             });
 
         var toggled = FirewallPolicyGuard.TryToggle(backend, out var result);
@@ -60,9 +60,7 @@ public sealed class FirewallPolicyGuardTests
         Assert.False(toggled);
         Assert.NotNull(result);
         Assert.False(result.Succeeded);
-        Assert.Equal(
-            NET_FW_ACTION_.NET_FW_ACTION_BLOCK,
-            backend.LastRequestedAction);
+        Assert.Equal(FirewallOutboundAction.Block, backend.LastRequestedAction);
     }
 
     [Fact]
@@ -76,9 +74,7 @@ public sealed class FirewallPolicyGuardTests
 
         Assert.False(toggled);
         Assert.Null(result);
-        Assert.Equal(
-            NET_FW_ACTION_.NET_FW_ACTION_BLOCK,
-            backend.LastRequestedAction);
+        Assert.Equal(FirewallOutboundAction.Block, backend.LastRequestedAction);
     }
 
     [Fact]
@@ -92,9 +88,7 @@ public sealed class FirewallPolicyGuardTests
 
         Assert.False(toggled);
         Assert.Null(result);
-        Assert.Equal(
-            NET_FW_ACTION_.NET_FW_ACTION_BLOCK,
-            backend.LastRequestedAction);
+        Assert.Equal(FirewallOutboundAction.Block, backend.LastRequestedAction);
     }
 
     [Fact]
