@@ -235,9 +235,8 @@ namespace MinimalFirewall
         /// failure, so a caller can never tell the user they are protected when only some profiles
         /// were actually updated.
         /// </summary>
-        public static SetDefaultOutboundActionResult SetDefaultOutboundAction(FirewallOutboundAction action)
+        public static SetDefaultOutboundActionResult SetDefaultOutboundAction(NET_FW_ACTION_ action)
         {
-            var comAction = FirewallOutboundActionMapper.ToComAction(action);
             INetFwPolicy2? firewallPolicy;
             try
             {
@@ -278,21 +277,21 @@ namespace MinimalFirewall
                         continue;
                     }
 
-                    if (previous == comAction)
+                    if (previous == action)
                     {
                         // Already correct: nothing was applied, so there is nothing to roll back here.
                         results.Add(new ProfileActionResult
                         {
                             Profile = profile,
                             Succeeded = true,
-                            PreviousAction = FirewallOutboundActionMapper.FromComAction(previous)
+                            PreviousAction = previous
                         });
                         continue;
                     }
 
                     try
                     {
-                        firewallPolicy.set_DefaultOutboundAction(profile, comAction);
+                        firewallPolicy.set_DefaultOutboundAction(profile, action);
                     }
                     catch (COMException ex)
                     {
@@ -301,7 +300,7 @@ namespace MinimalFirewall
                         {
                             Profile = profile,
                             Succeeded = false,
-                            PreviousAction = FirewallOutboundActionMapper.FromComAction(previous),
+                            PreviousAction = previous,
                             Error = DescribeComError(ex)
                         });
                         continue;
@@ -321,19 +320,19 @@ namespace MinimalFirewall
                         {
                             Profile = profile,
                             Succeeded = false,
-                            PreviousAction = FirewallOutboundActionMapper.FromComAction(previous),
+                            PreviousAction = previous,
                             Error = $"Could not verify the change: {DescribeComError(ex)}"
                         });
                         continue;
                     }
 
-                    if (verified != comAction)
+                    if (verified != action)
                     {
                         results.Add(new ProfileActionResult
                         {
                             Profile = profile,
                             Succeeded = false,
-                            PreviousAction = FirewallOutboundActionMapper.FromComAction(previous),
+                            PreviousAction = previous,
                             Error = "The policy did not retain the requested action (it may be overridden by Group Policy)."
                         });
                         continue;
@@ -344,7 +343,7 @@ namespace MinimalFirewall
                     {
                         Profile = profile,
                         Succeeded = true,
-                        PreviousAction = FirewallOutboundActionMapper.FromComAction(previous)
+                        PreviousAction = previous
                     });
                 }
 
