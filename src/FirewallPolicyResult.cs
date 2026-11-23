@@ -28,7 +28,7 @@ namespace MinimalFirewall
         public bool Succeeded { get; init; }
 
         /// <summary>Action the profile held before the change, when it could be read.</summary>
-        public FirewallOutboundAction? PreviousAction { get; init; }
+        public NET_FW_ACTION_? PreviousAction { get; init; }
 
         /// <summary>Populated only when <see cref="Succeeded"/> is false.</summary>
         public string? Error { get; init; }
@@ -42,7 +42,7 @@ namespace MinimalFirewall
     /// </summary>
     public sealed class SetDefaultOutboundActionResult
     {
-        public FirewallOutboundAction RequestedAction { get; init; }
+        public NET_FW_ACTION_ RequestedAction { get; init; }
         public IReadOnlyList<ProfileActionResult> Profiles { get; init; } = [];
 
         /// <summary>True when the firewall policy object itself could not be obtained.</summary>
