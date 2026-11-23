@@ -28,7 +28,7 @@ public static class FirewallPolicyGuard
 
     public static bool TryToggle(
         IFirewallBackend backend,
-        out SetDefaultOutboundActionResult? result)
+        out FirewallPolicyOperationResult? result)
     {
         ArgumentNullException.ThrowIfNull(backend);
 
