@@ -43,7 +43,7 @@ public static class FirewallPolicyGuard
             }
 
             result = backend.SetDefaultOutboundAction(targetAction);
-            return result.Succeeded;
+            return result?.Succeeded == true;
         }
         catch (Exception ex)
         {
