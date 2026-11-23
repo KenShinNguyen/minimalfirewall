@@ -26,6 +26,50 @@ public static class FirewallPolicyGuard
         }
     }
 
+    public static bool TryGetToggleAction(
+        IFirewallBackend backend,
+        out FirewallOutboundAction targetAction)
+    {
+        ArgumentNullException.ThrowIfNull(backend);
+
+        try
+        {
+            return TryGetToggleAction(
+                backend.GetDefaultOutboundState(),
+                out targetAction);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[ERROR] FirewallPolicyGuard.TryGetToggleAction: {ex.GetType().Name}: {ex.Message}");
+
+            targetAction = default;
+            return false;
+        }
+    }
+
+    public static bool TrySetDefaultOutboundAction(
+        IFirewallBackend backend,
+        FirewallOutboundAction action,
+        out FirewallPolicyOperationResult? result)
+    {
+        ArgumentNullException.ThrowIfNull(backend);
+
+        try
+        {
+            result = backend.SetDefaultOutboundAction(action);
+            return result?.Succeeded == true;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                $"[ERROR] FirewallPolicyGuard.TrySetDefaultOutboundAction: {ex.GetType().Name}: {ex.Message}");
+
+            result = null;
+            return false;
+        }
+    }
+
     public static bool TryToggle(
         IFirewallBackend backend,
         out FirewallPolicyOperationResult? result)
