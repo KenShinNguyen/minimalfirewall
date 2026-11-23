@@ -121,7 +121,7 @@ public sealed class FirewallPolicyGuardTests
 
         public FakeFirewallBackend(
             FirewallPolicyState state,
-            SetDefaultOutboundActionResult? result = null,
+            FirewallPolicyOperationResult? result = null,
             Exception? readException = null,
             Exception? writeException = null,
             bool returnNullResult = false)
@@ -145,7 +145,7 @@ public sealed class FirewallPolicyGuardTests
             return _state;
         }
 
-        public SetDefaultOutboundActionResult SetDefaultOutboundAction(
+        public FirewallPolicyOperationResult SetDefaultOutboundAction(
             FirewallOutboundAction action)
         {
             LastRequestedAction = action;
@@ -160,17 +160,10 @@ public sealed class FirewallPolicyGuardTests
                 return null!;
             }
 
-            return _result ?? new SetDefaultOutboundActionResult
+            return _result ?? new FirewallPolicyOperationResult
             {
                 RequestedAction = action,
-                Profiles =
-                [
-                    new ProfileActionResult
-                    {
-                        Profile = NET_FW_PROFILE_TYPE2_.NET_FW_PROFILE2_DOMAIN,
-                        Succeeded = true
-                    }
-                ]
+                Succeeded = true
             };
         }
     }
