@@ -8,7 +8,17 @@ public interface IFirewallBackend
 {
     FirewallPolicyState GetDefaultOutboundState();
 
-    SetDefaultOutboundActionResult SetDefaultOutboundAction(FirewallOutboundAction action);
+    FirewallPolicyOperationResult SetDefaultOutboundAction(FirewallOutboundAction action);
+}
+
+    private static FirewallPolicyOperationResult ToPolicyOperationResult(
+        SetDefaultOutboundActionResult result,
+        FirewallOutboundAction requestedAction)
+        => new()
+        {
+            RequestedAction = requestedAction,
+            Succeeded = result.Succeeded
+        };
 }
 
 /// <summary>
@@ -20,6 +30,9 @@ public sealed class WindowsFirewallBackend : IFirewallBackend
     public FirewallPolicyState GetDefaultOutboundState()
         => FirewallRuleService.GetDefaultOutboundState();
 
-    public SetDefaultOutboundActionResult SetDefaultOutboundAction(FirewallOutboundAction action)
-        => FirewallRuleService.SetDefaultOutboundAction(action);
+    public FirewallPolicyOperationResult SetDefaultOutboundAction(FirewallOutboundAction action)
+        => ToPolicyOperationResult(
+            FirewallRuleService.SetDefaultOutboundAction(
+                FirewallOutboundActionMapper.ToComAction(action)),
+            action);
 }
