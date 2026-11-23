@@ -1,4 +1,3 @@
-using NetFwTypeLib;
 using Xunit;
 
 namespace MinimalFirewall.Tests;
@@ -27,7 +26,7 @@ public sealed class FirewallPolicyGuardTests
         Assert.True(toggled);
         Assert.NotNull(result);
         Assert.Equal(
-            NET_FW_ACTION_.NET_FW_ACTION_BLOCK,
+            FirewallOutboundAction.Block,
             backend.LastRequestedAction);
     }
 
@@ -41,7 +40,7 @@ public sealed class FirewallPolicyGuardTests
         Assert.True(toggled);
         Assert.NotNull(result);
         Assert.Equal(
-            NET_FW_ACTION_.NET_FW_ACTION_ALLOW,
+            FirewallOutboundAction.Allow,
             backend.LastRequestedAction);
     }
 
@@ -50,9 +49,9 @@ public sealed class FirewallPolicyGuardTests
     {
         var backend = new FakeFirewallBackend(
             FirewallPolicyState.Allow,
-            new SetDefaultOutboundActionResult
+            new FirewallPolicyOperationResult
             {
-                RequestedAction = NET_FW_ACTION_.NET_FW_ACTION_BLOCK
+                RequestedAction = FirewallOutboundAction.Block
             });
 
         var toggled = FirewallPolicyGuard.TryToggle(backend, out var result);
@@ -60,9 +59,7 @@ public sealed class FirewallPolicyGuardTests
         Assert.False(toggled);
         Assert.NotNull(result);
         Assert.False(result.Succeeded);
-        Assert.Equal(
-            NET_FW_ACTION_.NET_FW_ACTION_BLOCK,
-            backend.LastRequestedAction);
+        Assert.Equal(FirewallOutboundAction.Block, backend.LastRequestedAction);
     }
 
     [Fact]
@@ -76,9 +73,7 @@ public sealed class FirewallPolicyGuardTests
 
         Assert.False(toggled);
         Assert.Null(result);
-        Assert.Equal(
-            NET_FW_ACTION_.NET_FW_ACTION_BLOCK,
-            backend.LastRequestedAction);
+        Assert.Equal(FirewallOutboundAction.Block, backend.LastRequestedAction);
     }
 
     [Fact]
@@ -92,9 +87,7 @@ public sealed class FirewallPolicyGuardTests
 
         Assert.False(toggled);
         Assert.Null(result);
-        Assert.Equal(
-            NET_FW_ACTION_.NET_FW_ACTION_BLOCK,
-            backend.LastRequestedAction);
+        Assert.Equal(FirewallOutboundAction.Block, backend.LastRequestedAction);
     }
 
     [Fact]
@@ -121,14 +114,14 @@ public sealed class FirewallPolicyGuardTests
     private sealed class FakeFirewallBackend : IFirewallBackend
     {
         private readonly FirewallPolicyState _state;
-        private readonly SetDefaultOutboundActionResult? _result;
+        private readonly FirewallPolicyOperationResult? _result;
         private readonly Exception? _readException;
         private readonly Exception? _writeException;
         private readonly bool _returnNullResult;
 
         public FakeFirewallBackend(
             FirewallPolicyState state,
-            SetDefaultOutboundActionResult? result = null,
+            FirewallPolicyOperationResult? result = null,
             Exception? readException = null,
             Exception? writeException = null,
             bool returnNullResult = false)
@@ -140,7 +133,7 @@ public sealed class FirewallPolicyGuardTests
             _returnNullResult = returnNullResult;
         }
 
-        public NET_FW_ACTION_? LastRequestedAction { get; private set; }
+        public FirewallOutboundAction? LastRequestedAction { get; private set; }
 
         public FirewallPolicyState GetDefaultOutboundState()
         {
@@ -152,8 +145,8 @@ public sealed class FirewallPolicyGuardTests
             return _state;
         }
 
-        public SetDefaultOutboundActionResult SetDefaultOutboundAction(
-            NET_FW_ACTION_ action)
+        public FirewallPolicyOperationResult SetDefaultOutboundAction(
+            FirewallOutboundAction action)
         {
             LastRequestedAction = action;
 
@@ -167,17 +160,10 @@ public sealed class FirewallPolicyGuardTests
                 return null!;
             }
 
-            return _result ?? new SetDefaultOutboundActionResult
+            return _result ?? new FirewallPolicyOperationResult
             {
                 RequestedAction = action,
-                Profiles =
-                [
-                    new ProfileActionResult
-                    {
-                        Profile = NET_FW_PROFILE_TYPE2_.NET_FW_PROFILE2_DOMAIN,
-                        Succeeded = true
-                    }
-                ]
+                Succeeded = true
             };
         }
     }

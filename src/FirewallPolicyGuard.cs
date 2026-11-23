@@ -1,5 +1,3 @@
-using NetFwTypeLib;
-
 namespace MinimalFirewall;
 
 /// <summary>
@@ -10,16 +8,16 @@ public static class FirewallPolicyGuard
 {
     public static bool TryGetToggleAction(
         FirewallPolicyState currentState,
-        out NET_FW_ACTION_ targetAction)
+        out FirewallOutboundAction targetAction)
     {
         switch (currentState)
         {
             case FirewallPolicyState.Allow:
-                targetAction = NET_FW_ACTION_.NET_FW_ACTION_BLOCK;
+                targetAction = FirewallOutboundAction.Block;
                 return true;
 
             case FirewallPolicyState.Block:
-                targetAction = NET_FW_ACTION_.NET_FW_ACTION_ALLOW;
+                targetAction = FirewallOutboundAction.Allow;
                 return true;
 
             default:
@@ -30,7 +28,7 @@ public static class FirewallPolicyGuard
 
     public static bool TryToggle(
         IFirewallBackend backend,
-        out SetDefaultOutboundActionResult? result)
+        out FirewallPolicyOperationResult? result)
     {
         ArgumentNullException.ThrowIfNull(backend);
 
