@@ -22,7 +22,8 @@ namespace MinimalFirewall
         FirewallSentryService sentryService,
         PublisherWhitelistService whitelistService,
         WildcardRuleService wildcardRuleService,
-        FirewallDataService dataService) : IDisposable
+        FirewallDataService dataService,
+        IFirewallBackend? policyBackend = null) : IDisposable
     {
         public FirewallSentryService SentryService => sentryService;
 
@@ -30,6 +31,7 @@ namespace MinimalFirewall
         private readonly TemporaryRuleManager _temporaryRuleManager = new();
         private readonly WildcardRuleService _wildcardRuleService = wildcardRuleService;
         private readonly FirewallDataService _dataService = dataService;
+        private readonly IFirewallBackend _policyBackend = policyBackend ?? new WindowsFirewallBackend();
 
         // Timer cleanup management
         private readonly ConcurrentDictionary<string, System.Threading.Timer> _temporaryRuleTimers = new();
