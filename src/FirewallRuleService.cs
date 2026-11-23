@@ -301,7 +301,7 @@ namespace MinimalFirewall
                         {
                             Profile = profile,
                             Succeeded = false,
-                            PreviousAction = previous,
+                            PreviousAction = FirewallOutboundActionMapper.FromComAction(previous),
                             Error = DescribeComError(ex)
                         });
                         continue;
@@ -321,7 +321,7 @@ namespace MinimalFirewall
                         {
                             Profile = profile,
                             Succeeded = false,
-                            PreviousAction = previous,
+                            PreviousAction = FirewallOutboundActionMapper.FromComAction(previous),
                             Error = $"Could not verify the change: {DescribeComError(ex)}"
                         });
                         continue;
@@ -333,7 +333,7 @@ namespace MinimalFirewall
                         {
                             Profile = profile,
                             Succeeded = false,
-                            PreviousAction = previous,
+                            PreviousAction = FirewallOutboundActionMapper.FromComAction(previous),
                             Error = "The policy did not retain the requested action (it may be overridden by Group Policy)."
                         });
                         continue;
@@ -344,7 +344,7 @@ namespace MinimalFirewall
                     {
                         Profile = profile,
                         Succeeded = true,
-                        PreviousAction = previous
+                        PreviousAction = FirewallOutboundActionMapper.FromComAction(previous)
                     });
                 }
 
