@@ -1,4 +1,3 @@
-using NetFwTypeLib;
 using Xunit;
 
 namespace MinimalFirewall.Tests;
@@ -50,7 +49,7 @@ public sealed class FirewallPolicyGuardTests
     {
         var backend = new FakeFirewallBackend(
             FirewallPolicyState.Allow,
-            new SetDefaultOutboundActionResult
+            new FirewallPolicyOperationResult
             {
                 RequestedAction = FirewallOutboundAction.Block
             });
@@ -115,7 +114,7 @@ public sealed class FirewallPolicyGuardTests
     private sealed class FakeFirewallBackend : IFirewallBackend
     {
         private readonly FirewallPolicyState _state;
-        private readonly SetDefaultOutboundActionResult? _result;
+        private readonly FirewallPolicyOperationResult? _result;
         private readonly Exception? _readException;
         private readonly Exception? _writeException;
         private readonly bool _returnNullResult;
