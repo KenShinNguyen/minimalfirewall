@@ -11,16 +11,6 @@ public interface IFirewallBackend
     FirewallPolicyOperationResult SetDefaultOutboundAction(FirewallOutboundAction action);
 }
 
-    private static FirewallPolicyOperationResult ToPolicyOperationResult(
-        SetDefaultOutboundActionResult result,
-        FirewallOutboundAction requestedAction)
-        => new()
-        {
-            RequestedAction = requestedAction,
-            Succeeded = result.Succeeded
-        };
-}
-
 /// <summary>
 /// Production adapter for the existing Windows Firewall implementation.
 /// FirewallRuleService remains the single owner of NetFwTypeLib policy mechanics.
@@ -35,4 +25,13 @@ public sealed class WindowsFirewallBackend : IFirewallBackend
             FirewallRuleService.SetDefaultOutboundAction(
                 FirewallOutboundActionMapper.ToComAction(action)),
             action);
+
+    private static FirewallPolicyOperationResult ToPolicyOperationResult(
+        SetDefaultOutboundActionResult result,
+        FirewallOutboundAction requestedAction)
+        => new()
+        {
+            RequestedAction = requestedAction,
+            Succeeded = result.Succeeded
+        };
 }
