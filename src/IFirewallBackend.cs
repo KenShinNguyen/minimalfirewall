@@ -1,5 +1,3 @@
-using NetFwTypeLib;
-
 namespace MinimalFirewall;
 
 /// <summary>
@@ -10,7 +8,7 @@ public interface IFirewallBackend
 {
     FirewallPolicyState GetDefaultOutboundState();
 
-    SetDefaultOutboundActionResult SetDefaultOutboundAction(NET_FW_ACTION_ action);
+    SetDefaultOutboundActionResult SetDefaultOutboundAction(FirewallOutboundAction action);
 }
 
 /// <summary>
@@ -22,6 +20,6 @@ public sealed class WindowsFirewallBackend : IFirewallBackend
     public FirewallPolicyState GetDefaultOutboundState()
         => FirewallRuleService.GetDefaultOutboundState();
 
-    public SetDefaultOutboundActionResult SetDefaultOutboundAction(NET_FW_ACTION_ action)
+    public SetDefaultOutboundActionResult SetDefaultOutboundAction(FirewallOutboundAction action)
         => FirewallRuleService.SetDefaultOutboundAction(action);
 }
