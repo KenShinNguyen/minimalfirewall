@@ -21,4 +21,17 @@ public sealed class FirewallOutboundActionMapperTests
             FirewallOutboundActionMapper.ToComAction(FirewallOutboundAction.Block));
     }
 
+    [Fact]
+    public void UnsupportedPositiveValue_ThrowsArgumentOutOfRangeException()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            FirewallOutboundActionMapper.ToComAction((FirewallOutboundAction)999));
+    }
+
+    [Fact]
+    public void UnsupportedNegativeValue_ThrowsArgumentOutOfRangeException()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            FirewallOutboundActionMapper.ToComAction((FirewallOutboundAction)(-1)));
+    }
 }
