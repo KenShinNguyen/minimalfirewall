@@ -32,6 +32,9 @@ public sealed class WindowsFirewallBackend : IFirewallBackend
         => new()
         {
             RequestedAction = requestedAction,
-            Succeeded = result.Succeeded
+            Succeeded = result.Succeeded,
+            RolledBack = result.RolledBack,
+            RollbackIncomplete = result.RollbackIncomplete,
+            DiagnosticSummary = result.BuildSummary()
         };
 }
