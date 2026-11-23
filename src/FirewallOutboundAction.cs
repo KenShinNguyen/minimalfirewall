@@ -1,6 +1,6 @@
 namespace MinimalFirewall;
 
-internal enum FirewallOutboundAction
+public enum FirewallOutboundAction
 {
     Allow,
     Block
@@ -16,11 +16,4 @@ internal static class FirewallOutboundActionMapper
             _ => throw new ArgumentOutOfRangeException(nameof(action), action, "Unsupported firewall outbound action.")
         };
 
-    public static FirewallOutboundAction FromComAction(NetFwTypeLib.NET_FW_ACTION_ action)
-        => action switch
-        {
-            NetFwTypeLib.NET_FW_ACTION_.NET_FW_ACTION_ALLOW => FirewallOutboundAction.Allow,
-            NetFwTypeLib.NET_FW_ACTION_.NET_FW_ACTION_BLOCK => FirewallOutboundAction.Block,
-            _ => throw new ArgumentOutOfRangeException(nameof(action), action, "Unsupported Windows Firewall action.")
-        };
 }
