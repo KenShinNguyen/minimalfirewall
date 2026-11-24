@@ -22,20 +22,15 @@ internal sealed class SignatureValidationCore
         _signerResolver = signerResolver ?? throw new ArgumentNullException(nameof(signerResolver));
     }
 
-    internal PublisherSignerIdentity? ValidateSigner(string filePath)
+    internal bool VerifyTrust(string filePath)
     {
-        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
-        {
-            return null;
-        }
-
-        if (!_verifier.Verify(filePath, revocationChecks: 1u, providerFlags: 0x40u))
-        {
-            return null;
-        }
-
-        return _signerResolver(filePath);
+        return !string.IsNullOrWhiteSpace(filePath)
+            && File.Exists(filePath)
+            && _verifier.Verify(filePath, revocationChecks: 1u, providerFlags: 0x40u);
     }
+
+    internal PublisherSignerIdentity? ValidateSigner(string filePath)
+        => VerifyTrust(filePath) ? _signerResolver(filePath) : null;
 
     internal bool IsSignatureTrusted(
         string filePath,
