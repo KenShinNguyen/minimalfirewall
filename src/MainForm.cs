@@ -129,7 +129,7 @@ namespace MinimalFirewall
             _groupManager = new FirewallGroupManager();
             _iconService = new IconService { ImageList = appIconList };
             _whitelistService = new PublisherWhitelistService();
-            _activityLogger = new UserActivityLogger(AppLog.Current) { IsEnabled = _appSettings.IsLoggingEnabled };
+            _activityLogger = new UserActivityLogger { IsEnabled = _appSettings.IsLoggingEnabled };
             _wildcardRuleService = new WildcardRuleService();
             _ruleTimestampService = new RuleTimestampService();
 

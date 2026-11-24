@@ -36,9 +36,6 @@ namespace MinimalFirewall
                 var args = Environment.GetCommandLineArgs();
                 bool startMinimized = args.Contains("-tray", StringComparer.OrdinalIgnoreCase);
 
-                string logPath = ConfigPathManager.GetConfigPath("minimalfirewall.log");
-                AppLog.Initialize(new RotatingFileAppLogger(logPath));
-
                 var mainForm = new MainForm(startMinimized);
                 Application.Run(mainForm);
             }

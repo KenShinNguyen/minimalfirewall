@@ -6,8 +6,19 @@ using System.Runtime.InteropServices;
 
 namespace MinimalFirewall;
 
-public sealed class WindowsFirewallBackend : IFirewallBackend
+public sealed class WindowsFirewallBackend : IFirewallBackend, ILockdownPolicyBackend
 {
+    public LockdownPolicySnapshot GetLockdownPolicySnapshot()
+    {
+        FirewallPolicyState state = GetDefaultOutboundState();
+        return new LockdownPolicySnapshot(
+            IsUnknown: state == FirewallPolicyState.Unknown,
+            IsFullyLockedDown: state == FirewallPolicyState.Block);
+    }
+
+    public bool ApplyLockdownPolicy()
+        => SetDefaultOutboundAction(FirewallOutboundAction.Block).Succeeded;
+
     public FirewallPolicyState GetDefaultOutboundState()
     {
         NET_FW_ACTION_? action = TryGetDefaultOutboundAction();
