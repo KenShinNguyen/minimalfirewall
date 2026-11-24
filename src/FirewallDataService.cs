@@ -1,10 +1,8 @@
-using NetFwTypeLib;
 using System.IO;
 using System.Linq;
 using MinimalFirewall.TypedObjects;
 using System.Collections.Generic;
 using Microsoft.Extensions.Caching.Memory;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Diagnostics;
@@ -14,7 +12,7 @@ namespace MinimalFirewall
 {
     public enum MfwRuleStatus { None, MfwAllow, MfwBlock }
 
-    public class FirewallDataService(FirewallRuleService firewallRuleService, WildcardRuleService wildcardRuleService, UwpService uwpService, RuleTimestampService ruleTimestampService)
+    public class FirewallDataService(FirewallRuleService firewallRuleService, WildcardRuleService wildcardRuleService, UwpService uwpService, RuleTimestampService ruleTimestampService, IFirewallRuleQueryBackend ruleQueryBackend)
     {
         [System.Runtime.InteropServices.DllImport("shlwapi.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, ExactSpelling = true)]
         private static extern int SHLoadIndirectString(string pszSource, System.Text.StringBuilder pszOutBuf, uint cchOutBuf, IntPtr ppvReserved);
@@ -22,6 +20,7 @@ namespace MinimalFirewall
         private readonly WildcardRuleService _wildcardRuleService = wildcardRuleService;
         private readonly UwpService _uwpService = uwpService;
         private readonly RuleTimestampService _ruleTimestampService = ruleTimestampService;
+        private readonly IFirewallRuleQueryBackend _ruleQueryBackend = ruleQueryBackend;
         private readonly MemoryCache _localCache = new(new MemoryCacheOptions());
         private const string ServicesCacheKey = "ServicesList";
         private const string MfwRulesCacheKey = "MfwRulesList";
@@ -120,8 +119,18 @@ namespace MinimalFirewall
         {
             return Task.Run(() =>
             {
-                // process and immediately destroys the COM object.
-                var mfwRules = FirewallRuleService.GetAllRulesMapped(CreateAdvancedRuleViewModel);
+                var queryResult = _ruleQueryBackend.GetAllRuleSnapshots();
+                if (!queryResult.Succeeded || queryResult.Value == null)
+                {
+                    if (queryResult.Exception != null)
+                    {
+                        Debug.WriteLine($"[WARN] GetAllRuleSnapshots failed: {queryResult.Exception.Message}");
+                    }
+                    return [];
+                }
+
+                // The query backend owns all COM objects. This layer receives only plain snapshots.
+                var mfwRules = queryResult.Value.Select(CreateAdvancedRuleViewModel).ToList();
 
                 if (token.IsCancellationRequested)
                 {
@@ -532,44 +541,44 @@ namespace MinimalFirewall
         }
 
 
-        public static AdvancedRuleViewModel CreateAdvancedRuleViewModel(INetFwRule2 rule)
+        public static AdvancedRuleViewModel CreateAdvancedRuleViewModel(FirewallRuleSnapshot rule)
         {
-            // Read COM properties once to avoid repeated interop calls
-            var rawAppName = rule.ApplicationName;
-            var rawProtocol = rule.Protocol;
-
-            string appName = string.IsNullOrEmpty(rawAppName) ? string.Empty : rawAppName;
-            string rawDescription = rule.Description ?? "N/A";
+            string appName = rule.ApplicationName ?? string.Empty;
+            string rawDescription = string.IsNullOrEmpty(rule.Description) ? "N/A" : rule.Description;
             string autoAllowedPublisher = string.Empty;
             if (rawDescription.StartsWith(MFWConstants.AutoAllowPublisherPrefix, StringComparison.OrdinalIgnoreCase))
             {
                 int endIdx = rawDescription.IndexOf(']', MFWConstants.AutoAllowPublisherPrefix.Length);
                 if (endIdx > 0)
                 {
-                    autoAllowedPublisher = rawDescription.Substring(MFWConstants.AutoAllowPublisherPrefix.Length, endIdx - MFWConstants.AutoAllowPublisherPrefix.Length);
+                    autoAllowedPublisher = rawDescription.Substring(
+                        MFWConstants.AutoAllowPublisherPrefix.Length,
+                        endIdx - MFWConstants.AutoAllowPublisherPrefix.Length);
                 }
                 rawDescription = string.Empty;
             }
 
+            string serviceName = GetStr(rule.ServiceName, string.Empty);
+
             return new AdvancedRuleViewModel
             {
-                Name = rule.Name ?? "Unnamed Rule",
+                Name = string.IsNullOrEmpty(rule.Name) ? "Unnamed Rule" : rule.Name,
                 Description = rawDescription,
-                IsEnabled = rule.Enabled,
-                Status = rule.Action == NET_FW_ACTION_.NET_FW_ACTION_ALLOW ? "Allow" : "Block",
+                IsEnabled = rule.IsEnabled,
+                Status = rule.IsAllow ? "Allow" : "Block",
                 Direction = (Directions)rule.Direction,
                 ApplicationName = appName == "*" ? "*" : PathResolver.NormalizePath(appName),
                 LocalPorts = GetStr(rule.LocalPorts, "*"),
                 RemotePorts = GetStr(rule.RemotePorts, "*"),
-                Protocol = (int)rawProtocol,
-                ProtocolName = GetProtocolName(rawProtocol),
-                ServiceName = GetStr(rule.serviceName, string.Empty) == "*" ? string.Empty : GetStr(rule.serviceName, string.Empty),
+                Protocol = rule.Protocol,
+                ProtocolName = GetProtocolName(rule.Protocol),
+                ServiceName = serviceName == "*" ? string.Empty : serviceName,
                 LocalAddresses = GetStr(rule.LocalAddresses, "*"),
                 RemoteAddresses = GetStr(rule.RemoteAddresses, "*"),
                 Profiles = GetProfileString(rule.Profiles),
                 Grouping = rule.Grouping ?? string.Empty,
-                InterfaceTypes = rule.InterfaceTypes ?? "All",
-                IcmpTypesAndCodes = rule.IcmpTypesAndCodes ?? "",
+                InterfaceTypes = string.IsNullOrEmpty(rule.InterfaceTypes) ? "All" : rule.InterfaceTypes,
+                IcmpTypesAndCodes = rule.IcmpTypesAndCodes ?? string.Empty,
                 AutoAllowedPublisher = autoAllowedPublisher
             };
         }
@@ -591,28 +600,34 @@ namespace MinimalFirewall
 
         private static string GetProfileString(int profiles)
         {
-            if (profiles == (int)NET_FW_PROFILE_TYPE2_.NET_FW_PROFILE2_ALL)
+            const int ProfileDomain = 1;
+            const int ProfilePrivate = 2;
+            const int ProfilePublic = 4;
+            const int ProfileAll = 0x7FFFFFFF;
+
+            if (profiles == ProfileAll)
             {
                 return "All";
             }
 
             List<string> profileNames = [];
-            if ((profiles & (int)NET_FW_PROFILE_TYPE2_.NET_FW_PROFILE2_DOMAIN) != 0)
+            if ((profiles & ProfileDomain) != 0)
             {
                 profileNames.Add("Domain");
             }
 
-            if ((profiles & (int)NET_FW_PROFILE_TYPE2_.NET_FW_PROFILE2_PRIVATE) != 0)
+            if ((profiles & ProfilePrivate) != 0)
             {
                 profileNames.Add("Private");
             }
 
-            if ((profiles & (int)NET_FW_PROFILE_TYPE2_.NET_FW_PROFILE2_PUBLIC) != 0)
+            if ((profiles & ProfilePublic) != 0)
             {
                 profileNames.Add("Public");
             }
 
             return string.Join(", ", profileNames);
         }
+
     }
 }

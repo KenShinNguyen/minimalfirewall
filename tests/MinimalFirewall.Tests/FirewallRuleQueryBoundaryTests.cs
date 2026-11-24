@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
 using Xunit;
+using MinimalFirewall.TypedObjects;
 
 namespace MinimalFirewall.Tests;
 
@@ -31,6 +32,71 @@ public sealed class FirewallRuleQueryBoundaryTests
     public void IsReenableTargetGroup_KeepsLegacyGroupNames(string? grouping, bool expected)
     {
         Assert.Equal(expected, MfwRuleGroups.IsReenableTargetGroup(grouping));
+    }
+
+    [Fact]
+    public void AdvancedRuleViewModelMapping_AllProfileBitmask_MapsToAll()
+    {
+        var snapshot = new FirewallRuleSnapshot(
+            "All Profiles",
+            "",
+            true,
+            2,
+            false,
+            256,
+            "*",
+            "",
+            "*",
+            "*",
+            "*",
+            "*",
+            0x7FFFFFFF,
+            "",
+            "All",
+            "");
+
+        var viewModel = FirewallDataService.CreateAdvancedRuleViewModel(snapshot);
+
+        Assert.Equal("All", viewModel.Profiles);
+        Assert.Equal("Outgoing", viewModel.Direction.ToString());
+        Assert.Equal("Block", viewModel.Status);
+        Assert.Equal("Any", viewModel.ProtocolName);
+    }
+
+    [Fact]
+    public void AdvancedRuleViewModelMapping_ConsumesComFreeSnapshot()
+    {
+        var snapshot = new FirewallRuleSnapshot(
+            "Demo Rule",
+            "MFW_AutoAllow_Publisher:[Contoso] hidden",
+            true,
+            1,
+            true,
+            6,
+            @"C:\Apps\demo.exe",
+            "DemoService",
+            "443",
+            "*",
+            "10.0.0.1",
+            "*",
+            7,
+            "Demo Group - MFW",
+            "All",
+            "");
+
+        var viewModel = FirewallDataService.CreateAdvancedRuleViewModel(snapshot);
+
+        Assert.Equal("Demo Rule", viewModel.Name);
+        Assert.Equal(string.Empty, viewModel.Description);
+        Assert.Equal("Contoso", viewModel.AutoAllowedPublisher);
+        Assert.True(viewModel.IsEnabled);
+        Assert.Equal("Allow", viewModel.Status);
+        Assert.Equal(Directions.Incoming, viewModel.Direction);
+        Assert.Equal("TCP", viewModel.ProtocolName);
+        Assert.Equal(@"C:\Apps\demo.exe", viewModel.ApplicationName);
+        Assert.Equal("DemoService", viewModel.ServiceName);
+        Assert.Equal("All", viewModel.Profiles);
+        Assert.Equal("All", viewModel.InterfaceTypes);
     }
 
     [Fact]
@@ -285,6 +351,9 @@ public sealed class FirewallRuleQueryBoundaryTests
         public int QueryCalls { get; private set; }
         public int EnableCalls { get; private set; }
         public List<(string Group, bool Enabled)> GroupCalls { get; } = [];
+
+        public FirewallRuleQueryResult<IReadOnlyList<FirewallRuleSnapshot>> GetAllRuleSnapshots()
+            => FirewallRuleQueryResult<IReadOnlyList<FirewallRuleSnapshot>>.Success([]);
 
         public FirewallRuleQueryResult<IReadOnlyList<FirewallRuleSummary>> GetMfwRules()
         {

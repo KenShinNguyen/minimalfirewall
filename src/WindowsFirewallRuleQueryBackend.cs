@@ -12,6 +12,20 @@ namespace MinimalFirewall;
 /// </summary>
 public sealed class WindowsFirewallRuleQueryBackend : IFirewallRuleQueryBackend
 {
+    public FirewallRuleQueryResult<IReadOnlyList<FirewallRuleSnapshot>> GetAllRuleSnapshots()
+        => Execute("query all firewall rules", () =>
+        {
+            var snapshots = new List<FirewallRuleSnapshot>();
+            var failures = new List<FirewallRuleOperationFailure>();
+
+            ForEachRule(rule =>
+            {
+                snapshots.Add(CreateSnapshot(rule));
+            }, failures);
+
+            return FirewallRuleQueryResult<IReadOnlyList<FirewallRuleSnapshot>>.Success(snapshots, failures);
+        });
+
     private static readonly Type? FwPolicyType = Type.GetTypeFromProgID("HNetCfg.FwPolicy2");
 
     public FirewallRuleQueryResult<IReadOnlyList<FirewallRuleSummary>> GetMfwRules()
@@ -142,13 +156,35 @@ public sealed class WindowsFirewallRuleQueryBackend : IFirewallRuleQueryBackend
     /// </summary>
     private static void ForEachRule(Action<INetFwRule2> visit, List<FirewallRuleOperationFailure> failures)
     {
-        var allRules = FirewallRuleService.GetAllRules();
-        int index = 0;
+        if (FwPolicyType == null)
+        {
+            failures.Add(new FirewallRuleOperationFailure(
+                "<policy>",
+                new InvalidOperationException("Windows Firewall policy COM type is unavailable.")));
+            return;
+        }
+
+        INetFwPolicy2? firewallPolicy = null;
+        INetFwRules? comRules = null;
         try
         {
-            for (; index < allRules.Count; index++)
+            firewallPolicy = Activator.CreateInstance(FwPolicyType) as INetFwPolicy2;
+            if (firewallPolicy == null)
             {
-                var rule = allRules[index];
+                failures.Add(new FirewallRuleOperationFailure(
+                    "<policy>",
+                    new InvalidOperationException("Windows Firewall policy COM object could not be created.")));
+                return;
+            }
+
+            comRules = firewallPolicy.Rules;
+            if (comRules == null)
+            {
+                return;
+            }
+
+            foreach (INetFwRule2 rule in comRules)
+            {
                 if (rule == null)
                 {
                     continue;
@@ -168,14 +204,35 @@ public sealed class WindowsFirewallRuleQueryBackend : IFirewallRuleQueryBackend
                 }
             }
         }
+        catch (COMException ex)
+        {
+            failures.Add(new FirewallRuleOperationFailure("<enumeration>", ex));
+        }
         finally
         {
-            for (int i = index + 1; i < allRules.Count; i++)
-            {
-                ReleaseQuietly(allRules[i]);
-            }
+            ReleaseQuietly(comRules);
+            ReleaseQuietly(firewallPolicy);
         }
     }
+
+    internal static FirewallRuleSnapshot CreateSnapshot(INetFwRule2 rule)
+        => new(
+            rule.Name ?? string.Empty,
+            rule.Description ?? string.Empty,
+            rule.Enabled,
+            (int)rule.Direction,
+            rule.Action == NET_FW_ACTION_.NET_FW_ACTION_ALLOW,
+            (int)rule.Protocol,
+            rule.ApplicationName ?? string.Empty,
+            rule.serviceName ?? string.Empty,
+            rule.LocalPorts ?? string.Empty,
+            rule.RemotePorts ?? string.Empty,
+            rule.LocalAddresses ?? string.Empty,
+            rule.RemoteAddresses ?? string.Empty,
+            (int)rule.Profiles,
+            rule.Grouping ?? string.Empty,
+            rule.InterfaceTypes ?? string.Empty,
+            rule.IcmpTypesAndCodes ?? string.Empty);
 
     private static FirewallRuleQueryResult<T> Execute<T>(
         string operationName,
