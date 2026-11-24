@@ -4,58 +4,100 @@ namespace MinimalFirewall.Tests;
 
 public sealed class PublisherWhitelistServiceBehaviorTests
 {
+    private const string ThumbprintA = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    private const string ThumbprintB = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
+
     [Fact]
-    public void Add_PersistsPublisherAndMatchingIsCaseInsensitiveAfterReload()
+    public void Add_PersistsCertificateIdentityAndMatchingIsCaseInsensitiveAfterReload()
     {
         using var storage = new TemporaryPublisherStorage();
         var service = storage.CreateService();
 
-        service.Add("Acme Corporation");
+        service.Add(ThumbprintA, "Acme Corporation", "CN=Acme Corporation, O=Acme Ltd, C=US");
 
         var reloaded = storage.CreateService();
 
-        Assert.True(reloaded.IsTrusted("ACME CORPORATION"));
-        Assert.Equal("Acme Corporation", Assert.Single(reloaded.GetTrustedPublishers()));
+        Assert.True(reloaded.IsTrusted(ThumbprintA.ToLowerInvariant()));
+        var entry = Assert.Single(reloaded.GetTrustedPublishers());
+        Assert.Equal("Acme Corporation", entry.DisplayName);
+        Assert.Equal(ThumbprintA, entry.Sha256Thumbprint);
+        Assert.False(entry.IsLegacy);
     }
 
     [Fact]
-    public void Add_DuplicatePublisherWithDifferentCasing_IsIgnored()
+    public void SameDisplayNameWithDifferentCertificateFingerprints_RemainsIsolated()
     {
         using var storage = new TemporaryPublisherStorage();
         var service = storage.CreateService();
 
-        service.Add("Acme Corporation");
-        service.Add("ACME CORPORATION");
+        service.Add(ThumbprintA, "Acme Corporation", "CN=Acme Corporation, O=Acme Ltd");
+        service.Add(ThumbprintB, "Acme Corporation", "CN=Acme Corporation, O=Acme Ltd");
 
-        Assert.Equal("Acme Corporation", Assert.Single(service.GetTrustedPublishers()));
+        Assert.True(service.IsTrusted(ThumbprintA));
+        Assert.True(service.IsTrusted(ThumbprintB));
+        Assert.Equal(2, service.GetTrustedPublishers().Count);
     }
 
     [Fact]
-    public void Remove_IsCaseInsensitiveAndPersistsDeletion()
+    public void Add_DuplicateFingerprintWithDifferentCasing_IsIgnored()
     {
         using var storage = new TemporaryPublisherStorage();
         var service = storage.CreateService();
-        service.Add("Acme Corporation");
 
-        service.Remove("ACME CORPORATION");
+        service.Add(ThumbprintA, "Acme Corporation", "CN=Acme Corporation, O=Acme Ltd");
+        service.Add(ThumbprintA.ToLowerInvariant(), "ACME CORPORATION", "CN=Acme Corporation, O=Acme Ltd");
+
+        Assert.Equal("Acme Corporation", Assert.Single(service.GetTrustedPublishers()).DisplayName);
+    }
+
+    [Fact]
+    public void Remove_RemovesOnlySelectedCertificateAndPersistsDeletion()
+    {
+        using var storage = new TemporaryPublisherStorage();
+        var service = storage.CreateService();
+        service.Add(ThumbprintA, "Acme Corporation", "CN=Acme Corporation, O=Acme Ltd");
+        service.Add(ThumbprintB, "Acme Corporation", "CN=Acme Corporation, O=Acme Ltd");
+
+        TrustedPublisherEntry selected = service.GetTrustedPublishers()
+            .Single(entry => entry.Sha256Thumbprint == ThumbprintA);
+        service.Remove(selected);
 
         var reloaded = storage.CreateService();
-        Assert.False(reloaded.IsTrusted("Acme Corporation"));
-        Assert.Empty(reloaded.GetTrustedPublishers());
+        Assert.False(reloaded.IsTrusted(ThumbprintA));
+        Assert.True(reloaded.IsTrusted(ThumbprintB));
+        Assert.Single(reloaded.GetTrustedPublishers());
     }
 
     [Fact]
-    public void Load_NormalizesCertificateSubjectToCommonNameAndPersistsNormalizedValue()
+    public void Load_LegacyNameOnlyEntriesRemainVisibleButAreNeverTrusted()
     {
         using var storage = new TemporaryPublisherStorage();
-        File.WriteAllText(storage.FilePath, """["CN=Acme Corporation, O=Acme Ltd"]""");
+        File.WriteAllText(storage.FilePath, """["Acme Corporation","CN=Contoso, O=Contoso Ltd"]""");
 
         var service = storage.CreateService();
 
-        Assert.True(service.IsTrusted("Acme Corporation"));
-        Assert.Equal("Acme Corporation", Assert.Single(service.GetTrustedPublishers()));
-        Assert.Contains("Acme Corporation", File.ReadAllText(storage.FilePath));
-        Assert.DoesNotContain("CN=Acme Corporation", File.ReadAllText(storage.FilePath));
+        Assert.False(service.IsTrusted(ThumbprintA));
+        var legacy = Assert.Single(service.GetTrustedPublishers().Where(entry => entry.IsLegacy));
+        Assert.Equal("Contoso", legacy.DisplayName);
+        Assert.Contains("disabled", legacy.ToString(), StringComparison.OrdinalIgnoreCase);
+
+        service.Remove(legacy);
+        Assert.Single(service.GetTrustedPublishers());
+        Assert.Contains("Acme Corporation", service.GetTrustedPublishers().Single().DisplayName);
+    }
+
+    [Fact]
+    public void Add_InvalidThumbprintOrEmptyMetadata_IsIgnored()
+    {
+        using var storage = new TemporaryPublisherStorage();
+        var service = storage.CreateService();
+
+        service.Add("Acme Corporation", "Acme Corporation", "CN=Acme Corporation");
+        service.Add(ThumbprintA, string.Empty, "CN=Acme Corporation");
+        service.Add(ThumbprintA, "Acme Corporation", string.Empty);
+
+        Assert.Empty(service.GetTrustedPublishers());
+        Assert.False(File.Exists(storage.FilePath));
     }
 
     [Fact]
@@ -67,19 +109,22 @@ public sealed class PublisherWhitelistServiceBehaviorTests
         var service = storage.CreateService();
 
         Assert.Empty(service.GetTrustedPublishers());
-        Assert.False(service.IsTrusted("Acme Corporation"));
+        Assert.False(service.IsTrusted(ThumbprintA));
     }
 
     [Fact]
-    public void Add_EmptyPublisherIsIgnored()
+    public void Remove_LegacyEntryDoesNotRemoveCertificateWithSameDisplayName()
     {
         using var storage = new TemporaryPublisherStorage();
+        File.WriteAllText(storage.FilePath, """["Acme Corporation"]""");
         var service = storage.CreateService();
+        service.Add(ThumbprintA, "Acme Corporation", "CN=Acme Corporation, O=Acme Ltd");
 
-        service.Add(string.Empty);
+        TrustedPublisherEntry legacy = Assert.Single(service.GetTrustedPublishers().Where(entry => entry.IsLegacy));
+        service.Remove(legacy);
 
-        Assert.Empty(service.GetTrustedPublishers());
-        Assert.False(File.Exists(storage.FilePath));
+        Assert.True(service.IsTrusted(ThumbprintA));
+        Assert.Single(service.GetTrustedPublishers());
     }
 
     private sealed class TemporaryPublisherStorage : IDisposable
