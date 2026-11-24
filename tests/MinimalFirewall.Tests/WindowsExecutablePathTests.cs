@@ -62,6 +62,7 @@ public sealed class WindowsExecutablePathTests
 
         Assert.Equal(new[] { "/select,", targetPath }, startInfo.ArgumentList);
     }
+
     [Fact]
     public void RunHiddenCommand_DrainsStandardOutputAndErrorConcurrently()
     {
@@ -74,6 +75,4 @@ public sealed class WindowsExecutablePathTests
         Assert.Contains("stderr-1234567890", error);
         Assert.DoesNotContain("timed out", error, StringComparison.OrdinalIgnoreCase);
     }
-
-
 }
