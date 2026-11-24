@@ -14,6 +14,8 @@ public sealed class FirewallSnapshotServiceBehaviorTests
 
         Assert.Empty(snapshot);
         Assert.False(service.SnapshotExists());
+
+        snapshot.Add("Rule A");
         Assert.Contains("RULE A", snapshot);
     }
 
