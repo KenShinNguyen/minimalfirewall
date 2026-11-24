@@ -189,6 +189,9 @@ namespace MinimalFirewall.TypedObjects
 
         public IPAddressRange(IPAddress begin, IPAddress end)
         {
+            ArgumentNullException.ThrowIfNull(begin);
+            ArgumentNullException.ThrowIfNull(end);
+
             if (begin.AddressFamily != end.AddressFamily)
             {
                 throw new ArgumentException("Addresses must be of the same family.");
@@ -231,7 +234,7 @@ namespace MinimalFirewall.TypedObjects
             if (cidrParts.Length == 2 && IPAddress.TryParse(cidrParts[0], out var baseAddress) && int.TryParse(cidrParts[1], out var maskLen))
             {
                 var baseAdrBytes = baseAddress.GetAddressBytes();
-                if (baseAdrBytes.Length * 8 < maskLen)
+                if (maskLen < 0 || maskLen > baseAdrBytes.Length * 8)
                 {
                     return false;
                 }
@@ -246,6 +249,12 @@ namespace MinimalFirewall.TypedObjects
             var rangeParts = ipRangeString.Split('-');
             if (rangeParts.Length == 2 && IPAddress.TryParse(rangeParts[0], out var begin) && IPAddress.TryParse(rangeParts[1], out var end))
             {
+                if (begin.AddressFamily != end.AddressFamily ||
+                    !Internal.Bits.GtECore(end.GetAddressBytes(), begin.GetAddressBytes()))
+                {
+                    return false;
+                }
+
                 range = new IPAddressRange(begin, end);
                 return true;
             }
@@ -290,9 +299,17 @@ namespace MinimalFirewall.TypedObjects
         {
             var first = Begin.GetAddressBytes();
             var last = End.GetAddressBytes();
-            for (var ip = first; Internal.Bits.LtECore(ip, last); ip = Internal.Bits.Increment(ip))
+            for (var ip = first; Internal.Bits.LtECore(ip, last);)
             {
                 yield return new IPAddress(ip);
+
+                // Do not increment past the maximum address after yielding the inclusive end.
+                if (ip.SequenceEqual(last))
+                {
+                    yield break;
+                }
+
+                ip = Internal.Bits.Increment(ip);
             }
         }
 
