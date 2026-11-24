@@ -1,6 +1,8 @@
 using NetFwTypeLib;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 
@@ -19,10 +21,75 @@ public sealed class WindowsFirewallRuleObservationBackend : IFirewallRuleObserva
             return null;
         }
 
-        using FirewallRuleHandle? ruleHandle = FirewallRuleService.GetRuleHandleByName(ruleName);
-        return ruleHandle == null
-            ? null
-            : FirewallDataService.CreateAdvancedRuleViewModel(WindowsFirewallRuleQueryBackend.CreateSnapshot(ruleHandle.Rule));
+        INetFwPolicy2? firewallPolicy = null;
+        INetFwRules? rulesCollection = null;
+        INetFwRule2? rule = null;
+
+        try
+        {
+            var policyType = Type.GetTypeFromProgID("HNetCfg.FwPolicy2");
+            if (policyType == null)
+            {
+                return null;
+            }
+
+            firewallPolicy = (INetFwPolicy2?)Activator.CreateInstance(policyType);
+            if (firewallPolicy == null)
+            {
+                return null;
+            }
+
+            rulesCollection = firewallPolicy.Rules;
+            if (rulesCollection == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                rule = rulesCollection.Item(ruleName) as INetFwRule2;
+            }
+            catch (FileNotFoundException)
+            {
+                return null;
+            }
+            catch (COMException ex)
+            {
+                Debug.WriteLine($"[ERROR] GetRuleByName ('{ruleName}'): COM error. HResult: 0x{ex.HResult:X8}. Message: {ex.Message}");
+                return null;
+            }
+
+            return rule == null
+                ? null
+                : FirewallDataService.CreateAdvancedRuleViewModel(WindowsFirewallRuleQueryBackend.CreateSnapshot(rule));
+        }
+        catch (COMException ex)
+        {
+            Debug.WriteLine($"[ERROR] GetRuleByName ('{ruleName}'): COM error. HResult: 0x{ex.HResult:X8}. Message: {ex.Message}");
+            return null;
+        }
+        catch (InvalidOperationException ex)
+        {
+            Debug.WriteLine($"[ERROR] GetRuleByName ('{ruleName}'): Firewall COM activation failed. {ex.Message}");
+            return null;
+        }
+        finally
+        {
+            if (rule != null)
+            {
+                Marshal.ReleaseComObject(rule);
+            }
+
+            if (rulesCollection != null)
+            {
+                Marshal.ReleaseComObject(rulesCollection);
+            }
+
+            if (firewallPolicy != null)
+            {
+                Marshal.ReleaseComObject(firewallPolicy);
+            }
+        }
     }
 
     public List<AdvancedRuleViewModel> GetForeignRules(
