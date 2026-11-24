@@ -417,7 +417,7 @@ namespace MinimalFirewall
             allowAndTrustPublisherToolStripMenuItem.Visible =
                 !string.IsNullOrEmpty(pending.AppPath) &&
                 File.Exists(pending.AppPath) &&
-                SignatureValidationService.IsSignatureTrusted(pending.AppPath, out _);
+                SignatureValidationService.TryGetPublisherIdentity(pending.AppPath, out _);
         }
 
         private void CreateAdvancedRuleToolStripMenuItem_Click(object sender, EventArgs e)
