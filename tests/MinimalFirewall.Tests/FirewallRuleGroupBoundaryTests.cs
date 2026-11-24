@@ -33,11 +33,12 @@ public sealed class FirewallRuleGroupBoundaryTests
     {
         var backend = new RecordingGroupBackend
         {
-            Groups =
-            [
-                new FirewallRuleGroupSnapshot("Z Group", 1, false),
-                new FirewallRuleGroupSnapshot("@FirewallAPI.dll,-28752", 3, true)
-            ]
+            GetGroupsResult =
+                FirewallRuleGroupResult<IReadOnlyList<FirewallRuleGroupSnapshot>>.Success(
+                [
+                    new FirewallRuleGroupSnapshot("@FirewallAPI.dll,-28752", 3, true),
+                    new FirewallRuleGroupSnapshot("Z Group", 1, false)
+                ])
         };
 
         var manager = new FirewallGroupManager(backend);
