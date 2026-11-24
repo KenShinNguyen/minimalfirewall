@@ -9,7 +9,7 @@ public sealed class PublisherIdentityTests
     public void FromSubjectName_WithEscapedCommasAndQuotes_ExtractsCnOrgCountryAccurately()
     {
         var subject = new X500DistinguishedName(
-            "CN=Contoso\\, Inc., O=Contoso\\, Ltd., C=US",
+            "CN=\"Contoso, Inc.\", O=\"Contoso, Ltd.\", C=US",
             X500DistinguishedNameFlags.None);
 
         PublisherIdentity identity = PublisherIdentity.FromSubjectName(subject);
