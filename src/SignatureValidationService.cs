@@ -6,6 +6,8 @@ using System.Security.Cryptography.X509Certificates;
 
 namespace MinimalFirewall
 {
+    public sealed record PublisherSignerIdentity(string DisplayName, string Subject, string Sha256Thumbprint);
+
     public static class SignatureValidationService
     {
         private static readonly Guid WINTRUST_ACTION_GENERIC_VERIFY_V2 = new("00AAC56B-CD44-11d0-8CC2-00C04FC295EE");
@@ -255,9 +257,4 @@ namespace MinimalFirewall
             }
         }
     }
-}
-
-namespace MinimalFirewall
-{
-    public sealed record PublisherSignerIdentity(string DisplayName, string Subject, string Sha256Thumbprint);
 }
