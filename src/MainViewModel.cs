@@ -942,30 +942,30 @@ namespace MinimalFirewall
 
         private void DebouncedSentryRefresh(object? state)
         {
-            async void runScan()
-            {
-                try
-                {
-                    _activityLogger.LogDebug("Sentry: Debounce timer elapsed. Checking for foreign rules.");
-                    await ScanForSystemChangesAsync(CancellationToken.None);
-                }
-                catch (Exception ex)
-                {
-                    _activityLogger.LogException("Error during sentry refresh", ex);
-                }
-            }
-
             // SystemChanges and the snapshot file are only ever touched from the UI
             // thread. This runs on a threadpool timer, so start the scan on the UI
             // context — the post-await continuation then stays there instead of
             // mutating the shared list concurrently with UI readers.
             if (_uiContext != null)
             {
-                _uiContext.Post(_ => runScan(), null);
+                _uiContext.Post(_ => _ = RunSentryRefreshAsync(), null);
             }
             else
             {
-                runScan();
+                _ = RunSentryRefreshAsync();
+            }
+        }
+
+        private async Task RunSentryRefreshAsync()
+        {
+            try
+            {
+                _activityLogger.LogDebug("Sentry: Debounce timer elapsed. Checking for foreign rules.");
+                await ScanForSystemChangesAsync(CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _activityLogger.LogException("Error during sentry refresh", ex);
             }
         }
 
