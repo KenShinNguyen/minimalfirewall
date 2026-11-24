@@ -19,7 +19,6 @@ namespace MinimalFirewall
     {
         private const int BlockedConnectionEventId = 5157;
         private const string SecurityLogName = "Security";
-        private const string WfpAuditSubcategoryGuid = "{0CCE9226-69AE-11D9-BED3-505054503030}";
 
         // WFP Raw Direction Codes (Culture Invariant)
         // 0 is always Inbound, 1 is always Outbound, regardless of Windows Language.
