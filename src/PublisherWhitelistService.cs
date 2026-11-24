@@ -12,8 +12,14 @@ namespace MinimalFirewall
         private readonly object _lock = new object();
 
         public PublisherWhitelistService()
+            : this(ConfigPathManager.GetConfigPath("trusted_publishers.json"))
         {
-            _configPath = ConfigPathManager.GetConfigPath("trusted_publishers.json");
+        }
+
+        internal PublisherWhitelistService(string configPath)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(configPath);
+            _configPath = configPath;
             _trustedPublishers = Load();
         }
 
