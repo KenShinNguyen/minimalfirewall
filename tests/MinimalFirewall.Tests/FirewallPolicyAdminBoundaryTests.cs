@@ -33,7 +33,10 @@ public sealed class FirewallPolicyAdminBoundaryTests
                 exception)
         };
 
-        var exceptionFromCall = Record.Exception(() => AdminTaskService.ResetFirewall(backend));
+        var exceptionFromCall = Record.Exception(() =>
+            AdminTaskService.ResetFirewall(
+                backend,
+                (_, _, _, _) => { }));
 
         Assert.Null(exceptionFromCall);
         Assert.Equal(1, backend.ResetCalls);
