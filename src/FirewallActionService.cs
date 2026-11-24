@@ -25,7 +25,8 @@ namespace MinimalFirewall
         FirewallDataService dataService,
         IFirewallBackend? policyBackend = null,
         ISystemFirewallRuleBackend? systemRuleBackend = null,
-        IFirewallRuleLifecycleBackend? ruleLifecycleBackend = null) : IDisposable
+        IFirewallRuleLifecycleBackend? ruleLifecycleBackend = null,
+        IFirewallRuleQueryBackend? ruleQueryBackend = null) : IDisposable
     {
         public FirewallSentryService SentryService => sentryService;
 
@@ -36,6 +37,7 @@ namespace MinimalFirewall
         private readonly IFirewallBackend _policyBackend = policyBackend ?? new WindowsFirewallBackend();
         private readonly ISystemFirewallRuleBackend _systemRuleBackend = systemRuleBackend ?? new WindowsSystemFirewallRuleBackend();
         private readonly IFirewallRuleLifecycleBackend _ruleLifecycleBackend = ruleLifecycleBackend ?? new WindowsFirewallRuleLifecycleBackend(firewallService);
+        private readonly IFirewallRuleQueryBackend _ruleQueryBackend = ruleQueryBackend ?? new WindowsFirewallRuleQueryBackend();
 
         // Timer cleanup management
         private readonly ConcurrentDictionary<string, System.Threading.Timer> _temporaryRuleTimers = new();
@@ -43,7 +45,6 @@ namespace MinimalFirewall
 
         // COM Type caching for performance
         private static readonly Type? FwRuleType = Type.GetTypeFromProgID("HNetCfg.FWRule");
-        private static readonly Type? FwPolicyType = Type.GetTypeFromProgID("HNetCfg.FwPolicy2");
         private const string CryptoRuleName = "Minimal Firewall System - Certificate Checks";
         private const string DhcpRuleName = "Minimal Firewall System - DHCP Client";
 
@@ -106,94 +107,70 @@ namespace MinimalFirewall
             }
         }
 
-        private static bool IsMfwRule(INetFwRule2 rule)
+        private void LogQueryFailure<T>(FirewallRuleQueryResult<T> result, string message)
         {
-            // Optimize: Read COM property once
-            string grouping = rule.Grouping;
-            if (string.IsNullOrEmpty(grouping))
+            if (result.Exception is not null)
             {
-                return false;
+                activityLogger.LogException(message.TrimEnd('.'), result.Exception);
+                return;
             }
 
-            // Optimize: Use safe casing comparison
-            return grouping.EndsWith(MFWConstants.MfwRuleSuffix, StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(grouping, MFWConstants.MainRuleGroup, StringComparison.OrdinalIgnoreCase) ||
-                   string.Equals(grouping, MFWConstants.WildcardRuleGroup, StringComparison.OrdinalIgnoreCase);
+            activityLogger.LogDebug(
+                string.IsNullOrWhiteSpace(result.Error) ? message : $"{message} {result.Error}");
+        }
+
+        private void LogRuleFailures<T>(FirewallRuleQueryResult<T> result, string context)
+        {
+            foreach (var failure in result.RuleFailures)
+            {
+                activityLogger.LogException($"{context} '{failure.RuleName}'", failure.Exception);
+            }
         }
 
         private void FindAndQueueDeleteForGeneralBlockRule(string appPath)
         {
             string normalizedAppPath = PathResolver.NormalizePath(appPath);
-            var rulesToDelete = new List<string>();
-            var allRules = FirewallRuleService.GetAllRules();
-            try
+            var query = _ruleQueryBackend.GetMfwRules();
+            if (!query.Succeeded || query.Value is null)
             {
-                foreach (var rule in allRules)
-                {
-                    if (rule == null)
-                    {
-                        continue;
-                    }
-
-                    // assign to local variables to avoid reading COM
-                    if (rule.Protocol != 256)
-                    {
-                        continue;
-                    }
-
-                    if (rule.Action != NET_FW_ACTION_.NET_FW_ACTION_BLOCK)
-                    {
-                        continue;
-                    }
-
-                    // Do this ONLY if the primitive types match.
-                    if (!IsMfwRule(rule))
-                    {
-                        continue;
-                    }
-
-                    if (rule.LocalPorts != "*")
-                    {
-                        continue;
-                    }
-
-                    if (rule.RemotePorts != "*")
-                    {
-                        continue;
-                    }
-
-                    string appName = rule.ApplicationName;
-                    if (string.Equals(PathResolver.NormalizePath(appName), normalizedAppPath, StringComparison.OrdinalIgnoreCase))
-                    {
-                        rulesToDelete.Add(rule.Name);
-                    }
-                }
+                LogQueryFailure(query, $"FindAndQueueDeleteForGeneralBlockRule failed for {appPath}.");
+                return;
             }
-            finally
+
+            LogRuleFailures(query, "FindAndQueueDeleteForGeneralBlockRule read rule");
+
+            var rulesToDelete = new List<string>();
+            foreach (var rule in query.Value)
             {
-                foreach (var rule in allRules)
+                if (rule.Protocol != 256 || !rule.IsBlock)
                 {
-                    if (rule != null)
-                    {
-                        Marshal.ReleaseComObject(rule);
-                    }
+                    continue;
+                }
+
+                if (rule.LocalPorts != "*" || rule.RemotePorts != "*")
+                {
+                    continue;
+                }
+
+                if (string.Equals(PathResolver.NormalizePath(rule.ApplicationName), normalizedAppPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    rulesToDelete.Add(rule.Name);
                 }
             }
 
             if (rulesToDelete.Count != 0)
             {
                 activityLogger.LogDebug($"Auto-deleting general block rule(s) for {appPath} to apply new Allow rule: {string.Join(", ", rulesToDelete)}");
-                try
+                var result = _ruleLifecycleBackend.DeleteByName(rulesToDelete);
+                if (!result.Succeeded)
                 {
-                    FirewallRuleService.DeleteRulesByName(rulesToDelete);
-                    foreach (var name in rulesToDelete)
-                    {
-                        activityLogger.LogChange("Rule Auto-Deleted", name);
-                    }
+                    LogLifecycleFailure(result, $"Auto-deleting rules for {appPath} failed.");
+                    return;
                 }
-                catch (COMException ex)
+
+                foreach (var name in rulesToDelete)
                 {
-                    activityLogger.LogException($"Auto-deleting rules for {appPath}", ex);
+                    activityLogger.LogChange("Rule Auto-Deleted", name);
                 }
             }
         }
@@ -731,39 +708,14 @@ namespace MinimalFirewall
 
         public void ReenableMfwRules()
         {
-            var allRules = FirewallRuleService.GetAllRules();
-            try
+            var result = _ruleQueryBackend.EnableMfwRules();
+            if (!result.Succeeded)
             {
-                foreach (var rule in allRules)
-                {
-                    try
-                    {
-                        // Safe COM property access
-                        string grouping = rule.Grouping;
-                        if (!string.IsNullOrEmpty(grouping) &&
-                             (grouping.EndsWith(MFWConstants.MfwRuleSuffix, StringComparison.OrdinalIgnoreCase) ||
-                               string.Equals(grouping, "Minimal Firewall", StringComparison.OrdinalIgnoreCase) ||
-                               string.Equals(grouping, "Minimal Firewall (Wildcard)", StringComparison.OrdinalIgnoreCase)))
-                        {
-                            if (!rule.Enabled)
-                            {
-                                rule.Enabled = true;
-                            }
-                        }
-                    }
-                    catch (COMException ex)
-                    {
-                        activityLogger.LogException($"Enable rule '{rule.Name}'", ex);
-                    }
-                }
+                LogQueryFailure(result, "ReenableMfwRules failed.");
+                return;
             }
-            finally
-            {
-                foreach (var rule in allRules)
-                {
-                    Marshal.ReleaseComObject(rule);
-                }
-            }
+
+            LogRuleFailures(result, "Enable rule");
         }
 
         private void SetupRuleTimer(string ruleName, TimeSpan duration)
@@ -869,77 +821,15 @@ namespace MinimalFirewall
 
         public void SetGroupEnabledState(string groupName, bool isEnabled)
         {
-            INetFwRules? comRules = null;
-            var rulesInGroup = new List<INetFwRule2>();
-            INetFwPolicy2? firewallPolicy = null;
-            try
+            var result = _ruleQueryBackend.SetGroupEnabled(groupName, isEnabled);
+            if (!result.Succeeded)
             {
-                if (FwPolicyType == null)
-                {
-                    return;
-                }
-
-                firewallPolicy = (INetFwPolicy2)Activator.CreateInstance(FwPolicyType)!;
-                if (firewallPolicy == null)
-                {
-                    return;
-                }
-
-                comRules = firewallPolicy.Rules;
-                foreach (INetFwRule2 r in comRules)
-                {
-                    if (r != null && string.Equals(r.Grouping, groupName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        rulesInGroup.Add(r);
-                    }
-                    else
-                    {
-                        if (r != null)
-                        {
-                            Marshal.ReleaseComObject(r);
-                        }
-                    }
-                }
-
-                foreach (var rule in rulesInGroup)
-                {
-                    try
-                    {
-                        if (rule.Enabled != isEnabled)
-                        {
-                            rule.Enabled = isEnabled;
-                        }
-                    }
-                    catch (COMException ex)
-                    {
-                        activityLogger.LogException($"SetGroupEnabledState for rule '{rule.Name}'", ex);
-                    }
-                }
-                activityLogger.LogChange("Group State Changed", $"Group '{groupName}' {(isEnabled ? "Enabled" : "Disabled")}");
+                LogQueryFailure(result, $"SetGroupEnabledState failed for group '{groupName}'.");
+                return;
             }
-            catch (COMException ex)
-            {
-                activityLogger.LogException($"SetGroupEnabledState for group '{groupName}'", ex);
-            }
-            finally
-            {
-                foreach (var rule in rulesInGroup)
-                {
-                    if (rule != null)
-                    {
-                        Marshal.ReleaseComObject(rule);
-                    }
-                }
-                if (comRules != null)
-                {
-                    Marshal.ReleaseComObject(comRules);
-                }
 
-                if (firewallPolicy != null)
-                {
-                    Marshal.ReleaseComObject(firewallPolicy);
-                }
-            }
+            LogRuleFailures(result, "SetGroupEnabledState for rule");
+            activityLogger.LogChange("Group State Changed", $"Group '{groupName}' {(isEnabled ? "Enabled" : "Disabled")}");
         }
 
         public void AcceptAllForeignRules(List<FirewallRuleChange> changes)
@@ -1440,34 +1330,17 @@ namespace MinimalFirewall
         public async Task<List<string>> CleanUpOrphanedRulesAsync(CancellationToken token, IProgress<int>? progress = null)
         {
             var orphanedRuleNames = new List<string>();
-            var mfwRulesData = new List<(string Name, string ApplicationName)>();
-            var allRules = FirewallRuleService.GetAllRules();
+            var query = _ruleQueryBackend.GetMfwRules();
+            if (!query.Succeeded || query.Value is null)
+            {
+                LogQueryFailure(query, "CleanUpOrphanedRulesAsync failed to enumerate rules.");
+                return orphanedRuleNames;
+            }
 
-            try
-            {
-                foreach (var rule in allRules)
-                {
-                    try
-                    {
-                        if (IsMfwRule(rule))
-                        {
-                            mfwRulesData.Add((rule.Name, rule.ApplicationName));
-                        }
-                    }
-                    catch { /* Ignore localized COM property read failures */ }
-                    finally
-                    {
-                        if (rule != null)
-                        {
-                            Marshal.ReleaseComObject(rule);
-                        }
-                    }
-                }
-            }
-            finally
-            {
-                // allRules items were completely evaluated and released in the loop
-            }
+            // Rules whose properties could not be read are skipped, as before.
+            var mfwRulesData = query.Value
+                .Select(r => (Name: r.Name, ApplicationName: r.ApplicationName))
+                .ToList();
 
             int total = mfwRulesData.Count;
             if (total == 0)
@@ -1513,14 +1386,14 @@ namespace MinimalFirewall
             if (orphanedRuleNames.Count != 0)
             {
                 activityLogger.LogDebug($"Deleting {orphanedRuleNames.Count} orphaned rules.");
-                try
+                var deleteResult = _ruleLifecycleBackend.DeleteByName(orphanedRuleNames);
+                if (!deleteResult.Succeeded)
                 {
-                    FirewallRuleService.DeleteRulesByName(orphanedRuleNames);
-                    activityLogger.LogChange("Orphaned Rules Cleaned", $"{orphanedRuleNames.Count} rules deleted.");
+                    LogLifecycleFailure(deleteResult, "CleanUpOrphanedRulesAsync (Deletion) failed.");
                 }
-                catch (COMException ex)
+                else
                 {
-                    activityLogger.LogException("CleanUpOrphanedRulesAsync (Deletion)", ex);
+                    activityLogger.LogChange("Orphaned Rules Cleaned", $"{orphanedRuleNames.Count} rules deleted.");
                 }
             }
 
