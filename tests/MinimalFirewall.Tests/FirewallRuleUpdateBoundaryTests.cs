@@ -1,4 +1,3 @@
-using System.Reflection;
 using Xunit;
 
 namespace MinimalFirewall.Tests;
@@ -11,35 +10,53 @@ public sealed class FirewallRuleUpdateBoundaryTests
         var method = typeof(IFirewallRuleUpdateBackend).GetMethod(nameof(IFirewallRuleUpdateBackend.UpdateRemoteAddresses));
 
         Assert.NotNull(method);
-        Assert.Equal(typeof(void), method!.ReturnType);
-        Assert.Equal(typeof(string), method.GetParameters()[0].ParameterType);
-        Assert.Equal(typeof(string), method.GetParameters()[1].ParameterType);
-
-        Assert.DoesNotContain(
-            method.GetParameters().Select(p => p.ParameterType),
-            type => type.FullName?.Contains("NetFwTypeLib", StringComparison.Ordinal) == true);
+        Assert.Equal(typeof(FirewallRuleUpdateResult), method!.ReturnType);
     }
 
     [Fact]
-    public void FakeUpdateBackend_ReceivesRuleNameAndAddresses()
+    public void SuccessResult_HasNoErrorMetadata()
     {
-        var backend = new FakeUpdateBackend();
+        var result = FirewallRuleUpdateResult.Success();
 
-        backend.UpdateRemoteAddresses("Demo Rule", "10.0.0.1,10.0.0.2");
-
-        Assert.Equal("Demo Rule", backend.RuleName);
-        Assert.Equal("10.0.0.1,10.0.0.2", backend.RemoteAddresses);
+        Assert.True(result.Succeeded);
+        Assert.Equal(FirewallRuleUpdateErrorCode.None, result.ErrorCode);
+        Assert.Null(result.Error);
+        Assert.Null(result.HResult);
     }
 
-    private sealed class FakeUpdateBackend : IFirewallRuleUpdateBackend
+    [Fact]
+    public void FailureResult_PreservesStructuredCodeAndHResult()
     {
-        public string? RuleName { get; private set; }
-        public string? RemoteAddresses { get; private set; }
+        var hresult = unchecked((int)0x80070005);
+        var result = FirewallRuleUpdateResult.Failure(
+            FirewallRuleUpdateErrorCode.AccessDenied,
+            "access denied",
+            hresult);
 
-        public void UpdateRemoteAddresses(string ruleName, string newRemoteAddresses)
-        {
-            RuleName = ruleName;
-            RemoteAddresses = newRemoteAddresses;
-        }
+        Assert.False(result.Succeeded);
+        Assert.Equal(FirewallRuleUpdateErrorCode.AccessDenied, result.ErrorCode);
+        Assert.Equal("access denied", result.Error);
+        Assert.Equal(hresult, result.HResult);
+    }
+
+    [Theory]
+    [InlineData(unchecked((int)0x80070005), FirewallRuleUpdateErrorCode.AccessDenied)]
+    [InlineData(unchecked((int)0x80070002), FirewallRuleUpdateErrorCode.RuleNotFound)]
+    [InlineData(unchecked((int)0x80070490), FirewallRuleUpdateErrorCode.RuleNotFound)]
+    [InlineData(unchecked((int)0x80004005), FirewallRuleUpdateErrorCode.OperationFailed)]
+    public void ErrorMapper_MapsKnownHResultsToDomainCodes(
+        int hresult,
+        FirewallRuleUpdateErrorCode expected)
+    {
+        Assert.Equal(expected, FirewallRuleUpdateErrorMapper.FromHResult(hresult));
+    }
+
+    [Fact]
+    public void FailureResult_RejectsSuccessErrorCode()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            FirewallRuleUpdateResult.Failure(
+                FirewallRuleUpdateErrorCode.None,
+                "invalid failure"));
     }
 }
