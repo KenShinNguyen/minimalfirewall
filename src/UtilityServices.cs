@@ -15,7 +15,7 @@ namespace MinimalFirewall
             ResetFirewall(new WindowsFirewallPolicyAdminBackend());
 
         public static void ResetFirewall(IFirewallPolicyAdminBackend backend) =>
-            ResetFirewall(backend, Messenger.MessageBox);
+            ResetFirewall(backend, (message, title, buttons, icon) => Messenger.MessageBox(message, title, buttons, icon));
 
         public static void ResetFirewall(
             IFirewallPolicyAdminBackend backend,
