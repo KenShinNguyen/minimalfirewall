@@ -23,7 +23,7 @@ public sealed class WindowsFirewallBackend : IFirewallBackend
 
     public FirewallPolicyOperationResult SetDefaultOutboundAction(FirewallOutboundAction action)
         => ToPolicyOperationResult(
-            SetDefaultOutboundActionCore(FirewallOutboundActionMapper.ToComAction(action)),
+            SetDefaultOutboundActionCore(action),
             action);
 
     private const int E_ACCESSDENIED = unchecked((int)0x80070005);
@@ -85,18 +85,20 @@ public sealed class WindowsFirewallBackend : IFirewallBackend
         finally { Marshal.ReleaseComObject(firewallPolicy); }
     }
 
-    private static SetDefaultOutboundActionResult SetDefaultOutboundActionCore(NET_FW_ACTION_ action)
+    private static SetDefaultOutboundActionResult SetDefaultOutboundActionCore(FirewallOutboundAction requestedAction)
     {
+        NET_FW_ACTION_ action = FirewallOutboundActionMapper.ToComAction(requestedAction);
+
         INetFwPolicy2? firewallPolicy;
         try { firewallPolicy = GetLocalPolicy(); }
         catch (Exception ex)
         {
             Debug.WriteLine($"[ERROR] SetDefaultOutboundAction: Could not open firewall policy. {ex.Message}");
-            return new SetDefaultOutboundActionResult { RequestedAction = action, PolicyUnavailable = true };
+            return new SetDefaultOutboundActionResult { RequestedAction = requestedAction, PolicyUnavailable = true };
         }
 
         if (firewallPolicy == null)
-            return new SetDefaultOutboundActionResult { RequestedAction = action, PolicyUnavailable = true };
+            return new SetDefaultOutboundActionResult { RequestedAction = requestedAction, PolicyUnavailable = true };
 
         var results = new List<ProfileActionResult>();
         var changed = new List<(NET_FW_PROFILE_TYPE2_ Profile, NET_FW_ACTION_ Previous)>();
@@ -110,13 +112,13 @@ public sealed class WindowsFirewallBackend : IFirewallBackend
                 catch (COMException ex)
                 {
                     Debug.WriteLine($"[ERROR] SetDefaultOutboundAction ({profile}): Could not read current action. HResult: 0x{ex.HResult:X8}.");
-                    results.Add(new ProfileActionResult { Profile = profile, Succeeded = false, Error = DescribeComError(ex) });
+                    results.Add(new ProfileActionResult { Profile = (int)profile, Succeeded = false, Error = DescribeComError(ex) });
                     continue;
                 }
 
                 if (previous == action)
                 {
-                    results.Add(new ProfileActionResult { Profile = profile, Succeeded = true, PreviousAction = previous });
+                    results.Add(new ProfileActionResult { Profile = (int)profile, Succeeded = true, PreviousAction = FirewallOutboundActionMapper.TryFromComAction(previous) });
                     continue;
                 }
 
@@ -124,7 +126,7 @@ public sealed class WindowsFirewallBackend : IFirewallBackend
                 catch (COMException ex)
                 {
                     Debug.WriteLine($"[ERROR] SetDefaultOutboundAction ({profile}): Failed. HResult: 0x{ex.HResult:X8}. Message: {ex.Message}");
-                    results.Add(new ProfileActionResult { Profile = profile, Succeeded = false, PreviousAction = previous, Error = DescribeComError(ex) });
+                    results.Add(new ProfileActionResult { Profile = (int)profile, Succeeded = false, PreviousAction = FirewallOutboundActionMapper.TryFromComAction(previous), Error = DescribeComError(ex) });
                     continue;
                 }
 
@@ -133,18 +135,18 @@ public sealed class WindowsFirewallBackend : IFirewallBackend
                 catch (COMException ex)
                 {
                     changed.Add((profile, previous));
-                    results.Add(new ProfileActionResult { Profile = profile, Succeeded = false, PreviousAction = previous, Error = $"Could not verify the change: {DescribeComError(ex)}" });
+                    results.Add(new ProfileActionResult { Profile = (int)profile, Succeeded = false, PreviousAction = FirewallOutboundActionMapper.TryFromComAction(previous), Error = $"Could not verify the change: {DescribeComError(ex)}" });
                     continue;
                 }
 
                 if (verified != action)
                 {
-                    results.Add(new ProfileActionResult { Profile = profile, Succeeded = false, PreviousAction = previous, Error = "The policy did not retain the requested action (it may be overridden by Group Policy)." });
+                    results.Add(new ProfileActionResult { Profile = (int)profile, Succeeded = false, PreviousAction = FirewallOutboundActionMapper.TryFromComAction(previous), Error = "The policy did not retain the requested action (it may be overridden by Group Policy)." });
                     continue;
                 }
 
                 changed.Add((profile, previous));
-                results.Add(new ProfileActionResult { Profile = profile, Succeeded = true, PreviousAction = previous });
+                results.Add(new ProfileActionResult { Profile = (int)profile, Succeeded = true, PreviousAction = FirewallOutboundActionMapper.TryFromComAction(previous) });
             }
 
             bool anyFailed = results.Exists(r => !r.Succeeded);
@@ -167,7 +169,7 @@ public sealed class WindowsFirewallBackend : IFirewallBackend
 
             return new SetDefaultOutboundActionResult
             {
-                RequestedAction = action,
+                RequestedAction = requestedAction,
                 Profiles = results,
                 RolledBack = rolledBack,
                 RollbackIncomplete = rollbackIncomplete
@@ -198,6 +200,18 @@ internal static class FirewallOutboundActionMapper
             FirewallOutboundAction.Allow => NET_FW_ACTION_.NET_FW_ACTION_ALLOW,
             FirewallOutboundAction.Block => NET_FW_ACTION_.NET_FW_ACTION_BLOCK,
             _ => throw new ArgumentOutOfRangeException(nameof(action), action, "Unsupported firewall outbound action.")
+        };
+
+    /// <summary>
+    /// Lenient inverse used when recording diagnostics: an unrecognised COM value
+    /// becomes null instead of throwing in the middle of a policy change.
+    /// </summary>
+    public static FirewallOutboundAction? TryFromComAction(NET_FW_ACTION_ action)
+        => action switch
+        {
+            NET_FW_ACTION_.NET_FW_ACTION_ALLOW => FirewallOutboundAction.Allow,
+            NET_FW_ACTION_.NET_FW_ACTION_BLOCK => FirewallOutboundAction.Block,
+            _ => null
         };
 
     public static FirewallOutboundAction FromComAction(NET_FW_ACTION_ action)
