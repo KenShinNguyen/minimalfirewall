@@ -381,7 +381,7 @@ namespace MinimalFirewall
 
 
         // Consolidated helper for System Rules (Crypto/DHCP)
-        private bool ManageSystemRule(
+        protected bool ManageSystemRule(
             string ruleName,
             string description,
             string applicationName,
