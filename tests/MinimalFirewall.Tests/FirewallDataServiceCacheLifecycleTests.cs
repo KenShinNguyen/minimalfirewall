@@ -151,7 +151,7 @@ public sealed class FirewallDataServiceCacheLifecycleTests
     private static FirewallDataService CreateService(
         IFirewallRuleQueryBackend backend,
         TemporaryRuleTimestampStorage storage) =>
-        new(null!, null!, storage.CreateService(), backend);
+        new(null!, storage.CreateUwpService(), storage.CreateService(), backend);
 
     private static FirewallRuleSnapshot DemoSnapshot(
         string name,
@@ -196,6 +196,9 @@ public sealed class FirewallDataServiceCacheLifecycleTests
             Directory.CreateDirectory(_directory);
             return new RuleTimestampService(Path.Combine(_directory, "timestamps.json"));
         }
+
+        public UwpService CreateUwpService() =>
+            new(Path.Combine(_directory, "uwp_apps.json"));
 
         public void Dispose()
         {
