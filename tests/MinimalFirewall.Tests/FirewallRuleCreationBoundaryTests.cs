@@ -167,7 +167,8 @@ public sealed class FirewallRuleCreationBoundaryTests
             "All",
             "");
 
-        Assert.Contains("Batch Creation Errors", service.ShownMessage);
+        Assert.Contains("Created 0 rules successfully.", service.ShownMessage);
+        Assert.Contains("Failed to create 1 rules:", service.ShownMessage);
         Assert.Contains("create failed", service.ShownMessage);
     }
 
