@@ -5,6 +5,7 @@
         <SupportedOSPlatformVersion>8.0</SupportedOSPlatformVersion>
         <RootNamespace>MinimalFirewall</RootNamespace>
 		<Nullable>enable</Nullable>
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<UseWindowsForms>true</UseWindowsForms>
 		<ApplicationIcon>logo.ico</ApplicationIcon>
