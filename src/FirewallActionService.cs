@@ -26,7 +26,8 @@ namespace MinimalFirewall
         IFirewallBackend? policyBackend = null,
         ISystemFirewallRuleBackend? systemRuleBackend = null,
         IFirewallRuleLifecycleBackend? ruleLifecycleBackend = null,
-        IFirewallRuleQueryBackend? ruleQueryBackend = null) : IDisposable
+        IFirewallRuleQueryBackend? ruleQueryBackend = null,
+        IFirewallRuleCreationBackend? ruleCreationBackend = null) : IDisposable
     {
         public FirewallSentryService SentryService => sentryService;
 
@@ -38,13 +39,12 @@ namespace MinimalFirewall
         private readonly ISystemFirewallRuleBackend _systemRuleBackend = systemRuleBackend ?? new WindowsSystemFirewallRuleBackend();
         private readonly IFirewallRuleLifecycleBackend _ruleLifecycleBackend = ruleLifecycleBackend ?? new WindowsFirewallRuleLifecycleBackend(firewallService);
         private readonly IFirewallRuleQueryBackend _ruleQueryBackend = ruleQueryBackend ?? new WindowsFirewallRuleQueryBackend();
+        private readonly IFirewallRuleCreationBackend _ruleCreationBackend = ruleCreationBackend ?? new WindowsFirewallRuleCreationBackend();
 
         // Timer cleanup management
         private readonly ConcurrentDictionary<string, System.Threading.Timer> _temporaryRuleTimers = new();
         private bool _disposed;
 
-        // COM Type caching for performance
-        private static readonly Type? FwRuleType = Type.GetTypeFromProgID("HNetCfg.FWRule");
         private const string CryptoRuleName = "Minimal Firewall System - Certificate Checks";
         private const string DhcpRuleName = "Minimal Firewall System - DHCP Client";
 
@@ -459,6 +459,11 @@ namespace MinimalFirewall
         protected virtual void ShowLockdownMessage(string text, string caption)
         {
             SafeShowMessageBox(text, caption, MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+
+        protected virtual void ShowBatchCreationErrors(string text)
+        {
+            SafeShowMessageBox(text, "Batch Creation Errors", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
 
         public void ToggleLockdown()
@@ -963,116 +968,38 @@ namespace MinimalFirewall
                     msg += $"\n...and {errors.Count - 5} more.";
                 }
 
-                SafeShowMessageBox(msg, "Batch Creation Errors", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                ShowBatchCreationErrors(msg);
             }
         }
 
         private void CreateSingleAdvancedRule(AdvancedRuleViewModel vm, string interfaceTypes, string icmpTypesAndCodes)
         {
-            activityLogger.LogDebug($"[Rule Debug] Starting creation for rule: {vm.Name}");
+            var definition = FirewallRuleCreationMapper.FromViewModel(vm, interfaceTypes, icmpTypesAndCodes);
+            var result = _ruleCreationBackend.CreateRule(definition);
 
-            if (FwRuleType == null)
+            if (result.Succeeded)
             {
-                activityLogger.LogDebug("[FATAL] Could not load HNetCfg.FWRule type. Firewall API unavailable.");
+                activityLogger.LogChange("Advanced Rule Created", vm.Name);
                 return;
             }
 
-            var firewallRule = (INetFwRule2)Activator.CreateInstance(FwRuleType)!;
-            bool ownershipTransferred = false;
-
-            try
+            if (result.Exception is not null)
             {
-                firewallRule.Name = vm.Name;
-                firewallRule.Description = vm.Description;
-                firewallRule.Enabled = vm.IsEnabled;
-                firewallRule.Grouping = vm.Grouping;
-
-                firewallRule.Protocol = vm.Protocol;
-
-                var action = vm.Status == "Allow" ? NET_FW_ACTION_.NET_FW_ACTION_ALLOW : NET_FW_ACTION_.NET_FW_ACTION_BLOCK;
-                firewallRule.Action = action;
-                firewallRule.Direction = (NET_FW_RULE_DIRECTION_)vm.Direction;
-
-                if (!string.IsNullOrWhiteSpace(vm.ServiceName))
-                {
-                    firewallRule.serviceName = vm.ServiceName;
-                }
-
-                if (!string.IsNullOrWhiteSpace(vm.ApplicationName))
-                {
-                    firewallRule.ApplicationName = vm.ApplicationName;
-                }
-                else
-                {
-                    firewallRule.ApplicationName = null;
-                }
-
-                // Setting ports on ANY other protocol causes Exception 0x80070057
-                if (vm.Protocol == 6 || vm.Protocol == 17)
-                {
-                    firewallRule.LocalPorts = !string.IsNullOrEmpty(vm.LocalPorts) ? vm.LocalPorts : "*";
-                    firewallRule.RemotePorts = !string.IsNullOrEmpty(vm.RemotePorts) ? vm.RemotePorts : "*";
-                }
-
-                firewallRule.LocalAddresses = !string.IsNullOrEmpty(vm.LocalAddresses) ? vm.LocalAddresses : "*";
-                firewallRule.RemoteAddresses = !string.IsNullOrEmpty(vm.RemoteAddresses) ? vm.RemoteAddresses : "*";
-
-                if (vm.Protocol == 1 || vm.Protocol == 58)
-                {
-                    firewallRule.IcmpTypesAndCodes = !string.IsNullOrWhiteSpace(icmpTypesAndCodes) ? icmpTypesAndCodes : "*";
-                }
-
-                NET_FW_PROFILE_TYPE2_ profiles = 0;
-                if (vm.Profiles.Contains("Domain"))
-                {
-                    profiles |= NET_FW_PROFILE_TYPE2_.NET_FW_PROFILE2_DOMAIN;
-                }
-
-                if (vm.Profiles.Contains("Private"))
-                {
-                    profiles |= NET_FW_PROFILE_TYPE2_.NET_FW_PROFILE2_PRIVATE;
-                }
-
-                if (vm.Profiles.Contains("Public"))
-                {
-                    profiles |= NET_FW_PROFILE_TYPE2_.NET_FW_PROFILE2_PUBLIC;
-                }
-
-                if (profiles == 0 || vm.Profiles == "All")
-                {
-                    profiles = NET_FW_PROFILE_TYPE2_.NET_FW_PROFILE2_ALL;
-                }
-
-                firewallRule.Profiles = (int)profiles;
-
-                string interfaces = string.IsNullOrWhiteSpace(interfaceTypes) ? "All" : interfaceTypes;
-                try
-                {
-                    firewallRule.InterfaceTypes = interfaces;
-                }
-                catch (Exception ex)
-                {
-                    activityLogger.LogDebug($"[Warning] Failed to set InterfaceTypes to '{interfaces}'. Defaulting to All. Error: {ex.Message}");
-                    firewallRule.InterfaceTypes = "All";
-                }
-
-                FirewallRuleService.CreateRule(firewallRule);
-                ownershipTransferred = true;
-
-                activityLogger.LogChange("Advanced Rule Created", vm.Name);
+                activityLogger.LogException(
+                    $"CreateSingleAdvancedRule failed for '{vm.Name}'",
+                    result.Exception);
             }
-            catch (Exception ex)
+            else
             {
-                activityLogger.LogException($"[FATAL] CreateSingleAdvancedRule failed for '{vm.Name}'", ex);
-                throw;
+                activityLogger.LogDebug(
+                    $"CreateSingleAdvancedRule failed for '{vm.Name}': {result.Error}");
             }
-            finally
-            {
-                if (!ownershipTransferred && firewallRule != null)
-                {
-                    Marshal.ReleaseComObject(firewallRule);
-                }
-            }
+
+            throw new InvalidOperationException(
+                string.IsNullOrWhiteSpace(result.Error)
+                    ? "Firewall rule creation failed."
+                    : result.Error,
+                result.Exception);
         }
 
         public static bool ParseActionString(string action, out Actions parsedAction, out Directions parsedDirection)
