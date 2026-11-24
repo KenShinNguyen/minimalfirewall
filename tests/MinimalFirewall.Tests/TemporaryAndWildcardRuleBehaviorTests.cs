@@ -50,7 +50,7 @@ public sealed class TemporaryAndWildcardRuleBehaviorTests
     public void TemporaryRuleManager_RuleNamesAreCaseInsensitive()
     {
         using var storage = new TemporaryRuleTestStorage();
-        using var manager = storage.CreateManager();
+        var manager = storage.CreateManager();
 
         manager.Add("Demo Rule", DateTime.UtcNow.AddMinutes(-1));
         manager.Add("demo rule", DateTime.UtcNow.AddMinutes(-2));
