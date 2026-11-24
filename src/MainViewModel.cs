@@ -18,7 +18,7 @@ namespace MinimalFirewall
 {
     public class MainViewModel : ObservableViewModel, IDisposable
     {
-        private readonly FirewallRuleService _firewallRuleService;
+        private readonly IFirewallRuleUpdateBackend _ruleUpdateBackend;
         private readonly WildcardRuleService _wildcardRuleService;
         private readonly BackgroundFirewallTaskService _backgroundTaskService;
         private readonly FirewallDataService _dataService;
@@ -52,7 +52,7 @@ namespace MinimalFirewall
         public event Action<string>? StatusTextChanged;
 
         public MainViewModel(
-            FirewallRuleService firewallRuleService,
+            IFirewallRuleUpdateBackend ruleUpdateBackend,
             WildcardRuleService wildcardRuleService,
             BackgroundFirewallTaskService backgroundTaskService,
             FirewallDataService dataService,
@@ -63,7 +63,7 @@ namespace MinimalFirewall
             UserActivityLogger activityLogger,
             FirewallActionsService actionsService)
         {
-            _firewallRuleService = firewallRuleService;
+            _ruleUpdateBackend = ruleUpdateBackend;
             _wildcardRuleService = wildcardRuleService;
             _backgroundTaskService = backgroundTaskService;
             _dataService = dataService;
@@ -319,7 +319,7 @@ namespace MinimalFirewall
                             {
                                 string newRemoteAddresses = string.Join(",", updatedIps);
                                 _activityLogger.LogDebug($"DNS Refresh: IPs changed for '{rule.Name}'. Updating Windows Firewall.");
-                                FirewallRuleService.UpdateRuleRemoteAddresses(rule.Name, newRemoteAddresses);
+                                _ruleUpdateBackend.UpdateRemoteAddresses(rule.Name, newRemoteAddresses);
                                 rule.RemoteAddresses = newRemoteAddresses; // Update local cache
                                 rulesUpdated = true;
                             }
