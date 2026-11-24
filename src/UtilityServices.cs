@@ -74,7 +74,7 @@ namespace MinimalFirewall
         private const uint AUDIT_FAILURE = 0x00000002;
 
         [LibraryImport("advapi32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
+        [return: MarshalAs(UnmanagedType.U1)]
         private static partial bool AuditQuerySystemPolicy(
             ref Guid pSubCategoryGuids,
             uint PolicyCount,
@@ -82,13 +82,13 @@ namespace MinimalFirewall
         );
 
         [LibraryImport("advapi32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
+        [return: MarshalAs(UnmanagedType.U1)]
         private static partial bool AuditFree(
             IntPtr pBuffer
         );
 
         [DllImport("advapi32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
+        [return: MarshalAs(UnmanagedType.U1)]
         private static extern bool AuditSetSystemPolicy(
             [In, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 1)] AUDIT_POLICY_INFORMATION[] auditPolicyInformation,
             uint policyCount);
