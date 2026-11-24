@@ -67,8 +67,7 @@
 		</Compile>
 		<Compile Update="Properties\Settings.Designer.cs">
 			<DesignTimeSharedInput>True</DesignTimeSharedInput>
-			<AutoGen>True</AutoGen>
-			<DependentUpon>Settings.settings</DependentUpon>
+			<LastGenOutput>Settings.Designer.cs</LastGenOutput>
 		</Compile>
 	</ItemGroup>
 
@@ -88,5 +87,9 @@
 
 	<ItemGroup>
 	  <Folder Include="Properties\PublishProfiles\" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="MinimalFirewall.Tests" />
 	</ItemGroup>
 </Project>
