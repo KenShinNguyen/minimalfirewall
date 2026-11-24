@@ -53,12 +53,12 @@ public sealed class TemporaryAndWildcardRuleBehaviorTests
         var manager = storage.CreateManager();
 
         manager.Add("Demo Rule", DateTime.UtcNow.AddMinutes(-1));
-        manager.Add("demo rule", DateTime.UtcNow.AddMinutes(-2));
+        var replacementExpiry = DateTime.UtcNow.AddMinutes(-2);
+        manager.Add("demo rule", replacementExpiry);
 
         var expired = manager.GetExpiredRules();
 
-        Assert.Single(expired);
-        Assert.Equal(DateTime.UtcNow.AddMinutes(-2), expired["DEMO RULE"], TimeSpan.FromSeconds(2));
+        Assert.Equal(replacementExpiry, Assert.Single(expired).Value);
     }
 
     [Fact]
