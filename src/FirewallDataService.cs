@@ -114,18 +114,20 @@ namespace MinimalFirewall
             }
         }
 
-        private Task<List<AdvancedRuleViewModel>> FetchAllMfwRulesAsync(CancellationToken token)
+        private sealed record MfwRuleFetchResult(bool Succeeded, List<AdvancedRuleViewModel> Rules);
+
+        private Task<MfwRuleFetchResult> FetchAllMfwRulesAsync(CancellationToken token)
         {
             return Task.Run(() =>
             {
                 var queryResult = _ruleQueryBackend.GetAllRuleSnapshots();
                 if (!queryResult.Succeeded || queryResult.Value == null)
                 {
-                    if (queryResult.Exception != null)
-                    {
-                        Debug.WriteLine($"[WARN] GetAllRuleSnapshots failed: {queryResult.Exception.Message}");
-                    }
-                    return [];
+                    string reason = queryResult.Error
+                        ?? queryResult.Exception?.Message
+                        ?? "The query backend returned no rule snapshot data.";
+                    Debug.WriteLine($"[WARN] GetAllRuleSnapshots failed: {reason}");
+                    return new MfwRuleFetchResult(false, []);
                 }
 
                 // The query backend owns all COM objects. This layer receives only plain snapshots.
@@ -133,7 +135,7 @@ namespace MinimalFirewall
 
                 if (token.IsCancellationRequested)
                 {
-                    return [];
+                    return new MfwRuleFetchResult(false, []);
                 }
 
                 // Stamp first-seen times, prune stale entries, persist if dirty.
@@ -158,7 +160,7 @@ namespace MinimalFirewall
                     _ruleTimestampService.EndBaselineSession();
                 }
 
-                return mfwRules;
+                return new MfwRuleFetchResult(true, mfwRules);
             }, token);
         }
 
@@ -175,19 +177,18 @@ namespace MinimalFirewall
                 return cached;
             }
 
-            var result = await FetchAllMfwRulesAsync(token);
+            var fetchResult = await FetchAllMfwRulesAsync(token);
 
-            // A cancelled scan yields a partial/empty list. Caching it would make every
-            // consumer (rule-status checks, popup suppression) see zero MFW rules, and
-            // the sliding expiration keeps renewing the poisoned entry on each read.
-            if (!token.IsCancellationRequested)
+            // A failed or cancelled query is not an empty result. Do not cache it:
+            // a transient Windows Firewall failure must be retried on the next request.
+            if (fetchResult.Succeeded && !token.IsCancellationRequested)
             {
                 var cacheOptions = new MemoryCacheEntryOptions()
                     .SetSlidingExpiration(TimeSpan.FromMinutes(10));
-                _localCache.Set(MfwRulesCacheKey, result, cacheOptions);
+                _localCache.Set(MfwRulesCacheKey, fetchResult.Rules, cacheOptions);
             }
 
-            return result;
+            return fetchResult.Rules;
         }
 
         public async Task<List<AggregatedRuleViewModel>> GetAggregatedRulesAsync(CancellationToken token, IProgress<int>? progress = null)
