@@ -1,3 +1,4 @@
+using Firewall.Traffic.ViewModels;
 using MinimalFirewall.Tests.Fakes;
 using MinimalFirewall.TypedObjects;
 using Xunit;
