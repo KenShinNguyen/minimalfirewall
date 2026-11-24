@@ -603,7 +603,7 @@ namespace MinimalFirewall
             const int ProfileDomain = 1;
             const int ProfilePrivate = 2;
             const int ProfilePublic = 4;
-            const int ProfileAll = ProfileDomain | ProfilePrivate | ProfilePublic;
+            const int ProfileAll = 0x7FFFFFFF;
 
             if (profiles == ProfileAll)
             {
