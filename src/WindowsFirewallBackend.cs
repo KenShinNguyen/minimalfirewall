@@ -188,3 +188,23 @@ public sealed class WindowsFirewallBackend : IFirewallBackend
             DiagnosticSummary = result.BuildSummary()
         };
 }
+
+
+internal static class FirewallOutboundActionMapper
+{
+    public static NET_FW_ACTION_ ToComAction(FirewallOutboundAction action)
+        => action switch
+        {
+            FirewallOutboundAction.Allow => NET_FW_ACTION_.NET_FW_ACTION_ALLOW,
+            FirewallOutboundAction.Block => NET_FW_ACTION_.NET_FW_ACTION_BLOCK,
+            _ => throw new ArgumentOutOfRangeException(nameof(action), action, "Unsupported firewall outbound action.")
+        };
+
+    public static FirewallOutboundAction FromComAction(NET_FW_ACTION_ action)
+        => action switch
+        {
+            NET_FW_ACTION_.NET_FW_ACTION_ALLOW => FirewallOutboundAction.Allow,
+            NET_FW_ACTION_.NET_FW_ACTION_BLOCK => FirewallOutboundAction.Block,
+            _ => throw new ArgumentOutOfRangeException(nameof(action), action, "Unsupported firewall COM action.")
+        };
+}
