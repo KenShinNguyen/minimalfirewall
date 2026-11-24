@@ -48,6 +48,11 @@ public sealed class FirewallRuleQueryResult<T>
 public interface IFirewallRuleQueryBackend
 {
     /// <summary>
+    /// Returns a COM-free snapshot of every Windows Firewall rule. The backend owns all COM
+    /// acquisition and release; callers receive only plain data.
+    /// </summary>
+    FirewallRuleQueryResult<IReadOnlyList<FirewallRuleSnapshot>> GetAllRuleSnapshots();
+    /// <summary>
     /// Returns every rule that belongs to a Minimal Firewall group (see <see cref="MfwRuleGroups.IsMfwGroup"/>).
     /// Rules whose properties cannot be read are skipped and reported in <c>RuleFailures</c>.
     /// </summary>
