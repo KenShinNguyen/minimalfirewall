@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
 using Xunit;
+using MinimalFirewall.TypedObjects;
 
 namespace MinimalFirewall.Tests;
 
