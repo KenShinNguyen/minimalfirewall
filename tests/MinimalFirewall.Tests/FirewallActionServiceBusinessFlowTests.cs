@@ -107,7 +107,7 @@ public sealed class FirewallActionServiceBusinessFlowTests
                 IsEnabled = true,
                 Direction = Directions.Outgoing,
                 Protocol = 6,
-                ApplicationName = @"C:\Program Files\Client\client.exe",
+                ApplicationName = @"C:\Program Files\WindowsApps\Contoso.App\client.exe",
                 Profiles = "All",
                 LocalPorts = "*",
                 RemotePorts = "*",
