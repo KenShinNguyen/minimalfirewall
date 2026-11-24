@@ -41,19 +41,68 @@ namespace MinimalFirewall
                 MessageBoxIcon.Error);
         }
 
-        private static readonly WfpAuditPolicyLease WfpAuditPolicy = new(
+        private static readonly IWfpAuditPolicyBackend WfpAuditPolicyBackend = new DelegateWfpAuditPolicyBackend(
             ReadAuditPolicyForLease,
-            WriteAuditPoliciesForLease);
+            SetFailureAuditingForCoordinator);
+
+        private static readonly WfpAuditPolicyCoordinator WfpAuditPolicyCoordinator = new(
+            WfpAuditPolicyBackend,
+            new FileWfpAuditStateStore(ConfigPathManager.GetConfigPath("wfp-audit-state.json")));
 
         public static void SetAuditPolicy(bool enable)
         {
             if (enable)
             {
-                WfpAuditPolicy.Enable();
+                WfpAuditPolicyCoordinator.EnableWithBaselineTracking();
             }
             else
             {
-                WfpAuditPolicy.Restore();
+                WfpAuditPolicyCoordinator.RestoreBaseline();
+            }
+        }
+
+        private sealed class DelegateWfpAuditPolicyBackend : IWfpAuditPolicyBackend
+        {
+            private readonly Func<Guid, uint> _readPolicy;
+            private readonly Func<Guid, bool, bool> _setFailureAuditing;
+
+            public DelegateWfpAuditPolicyBackend(
+                Func<Guid, uint> readPolicy,
+                Func<Guid, bool, bool> setFailureAuditing)
+            {
+                _readPolicy = readPolicy;
+                _setFailureAuditing = setFailureAuditing;
+            }
+
+            public bool IsFailureAuditingEnabled(string subcategoryGuid) =>
+                (_readPolicy(Guid.Parse(subcategoryGuid)) & AUDIT_FAILURE) == AUDIT_FAILURE;
+
+            public bool SetFailureAuditing(string subcategoryGuid, bool enable) =>
+                _setFailureAuditing(Guid.Parse(subcategoryGuid), enable);
+        }
+
+        private static bool SetFailureAuditingForCoordinator(Guid subcategoryGuid, bool enable)
+        {
+            uint current = ReadAuditPolicyForLease(subcategoryGuid);
+            uint desired = enable
+                ? (current & ~0x00000004u) | AUDIT_FAILURE
+                : current & ~AUDIT_FAILURE;
+
+            if (desired == current)
+            {
+                return true;
+            }
+
+            try
+            {
+                WriteAuditPoliciesForLease(
+                    [new AuditPolicySetting(subcategoryGuid, desired)]);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[AdminTask ERROR] Failed to set WFP audit failure policy for {subcategoryGuid}: {ex.Message}");
+                return false;
             }
         }
 
