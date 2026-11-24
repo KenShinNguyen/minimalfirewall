@@ -45,7 +45,7 @@ namespace MinimalFirewall
                     // Query Windows directly
                     var processInfo = new ProcessStartInfo
                     {
-                        FileName = "powershell.exe",
+                        FileName = ProcessHelper.GetWindowsSystemExecutablePath("powershell.exe"),
                         Arguments = "-NoProfile -Command \"@(Get-AppxPackage -ErrorAction SilentlyContinue | Select-Object Name, PackageFamilyName, Publisher) | ConvertTo-Json -Compress\"",
                         RedirectStandardOutput = true,
                         RedirectStandardError = true,
@@ -56,8 +56,11 @@ namespace MinimalFirewall
                     using var process = Process.Start(processInfo);
                     if (process != null)
                     {
-                        string jsonOutput = await process.StandardOutput.ReadToEndAsync(token);
+                        Task<string> standardOutputTask = process.StandardOutput.ReadToEndAsync(token);
+                        Task<string> standardErrorTask = process.StandardError.ReadToEndAsync(token);
                         await process.WaitForExitAsync(token);
+                        string jsonOutput = await standardOutputTask;
+                        _ = await standardErrorTask;
 
                         // Safely extract just the JSON array
                         int jsonStart = jsonOutput.IndexOf('[');
