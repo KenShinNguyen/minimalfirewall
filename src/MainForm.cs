@@ -17,7 +17,6 @@ using Firewall.Traffic.ViewModels;
 using MinimalFirewall;
 using MinimalFirewall.Groups;
 using MinimalFirewall.TypedObjects;
-using NetFwTypeLib;
 using static DarkModeForms.OSThemeColors;
 
 namespace MinimalFirewall
