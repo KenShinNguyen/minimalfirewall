@@ -5,7 +5,6 @@ using System.Linq;
 using System.Net;
 using DarkModeForms;
 using MinimalFirewall.TypedObjects;
-using NetFwTypeLib;
 
 namespace MinimalFirewall
 {
