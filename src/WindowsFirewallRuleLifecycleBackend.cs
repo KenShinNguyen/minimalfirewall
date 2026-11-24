@@ -14,22 +14,22 @@ public sealed class WindowsFirewallRuleLifecycleBackend : IFirewallRuleLifecycle
     }
 
     public FirewallRuleLifecycleOperationResult DeleteByPath(IReadOnlyList<string> appPaths)
-        => Execute(() => _firewallService.DeleteRulesByPath([.. appPaths]), "delete rules by path");
+        => Execute(() => FirewallRuleService.DeleteRulesByPath([.. appPaths]), "delete rules by path");
 
     public FirewallRuleLifecycleOperationResult DeleteUwp(IReadOnlyList<string> packageFamilyNames)
-        => Execute(() => _firewallService.DeleteUwpRules([.. packageFamilyNames]), "delete UWP rules");
+        => Execute(() => FirewallRuleService.DeleteUwpRules([.. packageFamilyNames]), "delete UWP rules");
 
     public FirewallRuleLifecycleOperationResult DeleteByName(IReadOnlyList<string> ruleNames)
-        => Execute(() => _firewallService.DeleteRulesByName([.. ruleNames]), "delete rules by name");
+        => Execute(() => FirewallRuleService.DeleteRulesByName([.. ruleNames]), "delete rules by name");
 
     public FirewallRuleLifecycleOperationResult DeleteByDescription(string description)
-        => Execute(() => _firewallService.DeleteRulesByDescription(description), "delete rules by description");
+        => Execute(() => FirewallRuleService.DeleteRulesByDescription(description), "delete rules by description");
 
     public FirewallRuleLifecycleOperationResult DeleteByGroup(string groupName)
-        => Execute(() => _firewallService.DeleteRulesByGroup(groupName), "delete rules by group");
+        => Execute(() => FirewallRuleService.DeleteRulesByGroup(groupName), "delete rules by group");
 
     public FirewallRuleLifecycleOperationResult DeleteAllMfwRules()
-        => Execute(_firewallService.DeleteAllMfwRules, "delete all Minimal Firewall rules");
+        => Execute(FirewallRuleService.DeleteAllMfwRules, "delete all Minimal Firewall rules");
 
     public FirewallRuleLifecycleOperationResult EnableByName(string ruleName)
         => Execute(() => _firewallService.EnableRuleByName(ruleName), "enable rule");
