@@ -58,47 +58,21 @@ namespace MinimalFirewall
         /// whitelisted using mutable PE version metadata.
         /// </summary>
         public static bool TryGetTrustedSignerIdentity(
-            string filePath,
-            out PublisherSignerIdentity? signerIdentity)
+        string filePath,
+        out PublisherSignerIdentity? signerIdentity)
+    {
+        signerIdentity = null;
+
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath) || !VerifyWithWinTrust(filePath))
         {
-            signerIdentity = null;
-
-            if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath) || !VerifyWithWinTrust(filePath))
-            {
-                return false;
-            }
-
-            try
-            {
-#pragma warning disable SYSLIB0057 // CreateFromSignedFile has no direct replacement for Authenticode signer extraction
-                using var basicCert = X509Certificate.CreateFromSignedFile(filePath);
-                using var cert = new X509Certificate2(basicCert);
-#pragma warning restore SYSLIB0057
-
-                string? displayName = NormalizePublisherName(cert.Subject);
-                if (string.IsNullOrWhiteSpace(displayName))
-                {
-                    return false;
-                }
-
-                string sha256Thumbprint = Convert.ToHexString(SHA256.HashData(cert.RawData));
-                signerIdentity = new PublisherSignerIdentity(displayName, cert.Subject, sha256Thumbprint);
-                return true;
-            }
-            catch (CryptographicException)
-            {
-                // Catalog-signed binaries do not expose an embedded signer certificate through
-                // CreateFromSignedFile. Do not fall back to PE CompanyName for allowlisting.
-                return false;
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
-            {
-                Debug.WriteLine($"[INFO] Strong signer extraction failed for {filePath}: {ex.Message}");
-                return false;
-            }
+            return false;
         }
 
-        public static bool IsSignatureTrusted(string filePath, out string? publisherName)
+        signerIdentity = ExtractSignerIdentity(filePath);
+        return signerIdentity is not null;
+    }
+
+    public static bool IsSignatureTrusted(string filePath, out string? publisherName)
         {
             publisherName = null;
 
@@ -257,4 +231,36 @@ namespace MinimalFirewall
             }
         }
     }
-}
+}    private static PublisherSignerIdentity? ResolveSignerIdentity(string filePath)
+        => ExtractSignerIdentity(filePath);
+
+    private static PublisherSignerIdentity? ExtractSignerIdentity(string filePath)
+    {
+        try
+        {
+#pragma warning disable SYSLIB0057
+            using var basicCert = X509Certificate.CreateFromSignedFile(filePath);
+            using var cert = new X509Certificate2(basicCert);
+#pragma warning restore SYSLIB0057
+
+            string? displayName = NormalizePublisherName(cert.Subject);
+            if (string.IsNullOrWhiteSpace(displayName))
+            {
+                return null;
+            }
+
+            string sha256Thumbprint = Convert.ToHexString(SHA256.HashData(cert.RawData));
+            return new PublisherSignerIdentity(displayName, cert.Subject, sha256Thumbprint);
+        }
+        catch (CryptographicException)
+        {
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            Debug.WriteLine($"[INFO] Strong signer extraction failed for {filePath}: {ex.Message}");
+            return null;
+        }
+    }
+
+
