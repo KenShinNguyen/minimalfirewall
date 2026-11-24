@@ -8,7 +8,7 @@ public sealed class TemporaryAndWildcardRuleBehaviorTests
     public void TemporaryRuleManager_AddPersistsAndReloadsRule()
     {
         using var storage = new TemporaryRuleTestStorage();
-        var expiry = DateTime.UtcNow.AddHours(1);
+        var expiry = DateTime.UtcNow.AddMinutes(-1);
 
         using (var manager = storage.CreateManager())
         {
@@ -17,7 +17,8 @@ public sealed class TemporaryAndWildcardRuleBehaviorTests
 
         using var reloaded = storage.CreateManager();
 
-        Assert.Equal(expiry, Assert.Single(reloaded.GetExpiredRules().Where(_ => false), null));
+        var expired = reloaded.GetExpiredRules();
+        Assert.Equal(expiry, expired["Demo Rule"]);
     }
 
     [Fact]
