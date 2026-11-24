@@ -41,17 +41,19 @@ namespace MinimalFirewall
                 MessageBoxIcon.Error);
         }
 
+        private static readonly WfpAuditPolicyLease WfpAuditPolicy = new(
+            ReadAuditPolicyForLease,
+            WriteAuditPoliciesForLease);
+
         public static void SetAuditPolicy(bool enable)
         {
-            string[] guids =
-            [
-                "{0CCE9225-69AE-11D9-BED3-505054503030}",
-                "{0CCE9226-69AE-11D9-BED3-505054503030}"
-            ];
-            foreach (var guid in guids)
+            if (enable)
             {
-                string arguments = $"/set /subcategory:{guid} /failure:{(enable ? "enable" : "disable")}";
-                Execute(arguments, Path.Combine(Environment.SystemDirectory, "auditpol.exe"), out _);
+                WfpAuditPolicy.Enable();
+            }
+            else
+            {
+                WfpAuditPolicy.Restore();
             }
         }
 
@@ -85,11 +87,59 @@ namespace MinimalFirewall
             IntPtr pBuffer
         );
 
+        [DllImport("advapi32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool AuditSetSystemPolicy(
+            [In, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 1)] AUDIT_POLICY_INFORMATION[] auditPolicyInformation,
+            uint policyCount);
+
+        private static uint ReadAuditPolicyForLease(Guid subcategoryGuid)
+        {
+            if (!AuditQuerySystemPolicy(ref subcategoryGuid, 1, out IntPtr pPolicy))
+            {
+                int error = Marshal.GetLastWin32Error();
+                throw new System.ComponentModel.Win32Exception(
+                    error,
+                    $"AuditQuerySystemPolicy failed for WFP subcategory {subcategoryGuid}.");
+            }
+
+            try
+            {
+                return Marshal.PtrToStructure<AUDIT_POLICY_INFORMATION>(pPolicy).AuditingInformation;
+            }
+            finally
+            {
+                if (pPolicy != IntPtr.Zero)
+                {
+                    AuditFree(pPolicy);
+                }
+            }
+        }
+
+        private static void WriteAuditPoliciesForLease(IReadOnlyList<AuditPolicySetting> settings)
+        {
+            var nativeSettings = settings.Select(setting => new AUDIT_POLICY_INFORMATION
+            {
+                AuditSubCategoryGuid = setting.SubcategoryId,
+                AuditingInformation = setting.AuditingInformation,
+                AuditCategoryGuid = Guid.Empty
+            }).ToArray();
+
+            if (!AuditSetSystemPolicy(nativeSettings, (uint)nativeSettings.Length))
+            {
+                int error = Marshal.GetLastWin32Error();
+                throw new System.ComponentModel.Win32Exception(
+                    error,
+                    "AuditSetSystemPolicy failed while updating Windows Filtering Platform auditing.");
+            }
+        }
+
         [StructLayout(LayoutKind.Sequential)]
         private struct AUDIT_POLICY_INFORMATION
         {
             public Guid AuditSubCategoryGuid;
             public uint AuditingInformation;
+            public Guid AuditCategoryGuid;
         }
 
         private static bool IsAuditingEnabledForSubcategory(Guid subcategoryGuid)
