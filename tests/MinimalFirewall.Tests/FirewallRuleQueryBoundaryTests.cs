@@ -79,7 +79,7 @@ public sealed class FirewallRuleQueryBoundaryTests
             "*",
             "10.0.0.1",
             "*",
-            7,
+            0x7FFFFFFF,
             "Demo Group - MFW",
             "All",
             "");
