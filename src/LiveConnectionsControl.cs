@@ -411,7 +411,7 @@ namespace MinimalFirewall
 
                 try
                 {
-                    Process.Start("explorer.exe", $"/select, \"{connection.ProcessPath}\"");
+                    Process.Start(ProcessHelper.CreateExplorerSelectStartInfo(connection.ProcessPath));
                 }
                 catch (Exception ex) when (ex is Win32Exception or FileNotFoundException)
                 {
