@@ -39,10 +39,7 @@ public sealed class FirewallSentryServiceBoundaryTests
         var sentry = new FirewallSentryService(backend);
 
         sentry.CheckForChanges();
-        sentry.ResetBaseline();
 
-        // ResetBaseline intentionally restores first-scan state, so this test only
-        // verifies the backend lookup contract through the normal event queue path.
         InvokeChangeEvent(sentry, "Changed Rule", ChangeType.Modified);
 
         var changes = sentry.CheckForChanges();
