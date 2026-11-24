@@ -24,7 +24,8 @@ namespace MinimalFirewall
         WildcardRuleService wildcardRuleService,
         FirewallDataService dataService,
         IFirewallBackend? policyBackend = null,
-        ISystemFirewallRuleBackend? systemRuleBackend = null) : IDisposable
+        ISystemFirewallRuleBackend? systemRuleBackend = null,
+        IFirewallRuleLifecycleBackend? ruleLifecycleBackend = null) : IDisposable
     {
         public FirewallSentryService SentryService => sentryService;
 
@@ -34,6 +35,7 @@ namespace MinimalFirewall
         private readonly FirewallDataService _dataService = dataService;
         private readonly IFirewallBackend _policyBackend = policyBackend ?? new WindowsFirewallBackend();
         private readonly ISystemFirewallRuleBackend _systemRuleBackend = systemRuleBackend ?? new WindowsSystemFirewallRuleBackend();
+        private readonly IFirewallRuleLifecycleBackend _ruleLifecycleBackend = ruleLifecycleBackend ?? new WindowsFirewallRuleLifecycleBackend();
 
         // Timer cleanup management
         private readonly ConcurrentDictionary<string, System.Threading.Timer> _temporaryRuleTimers = new();
@@ -75,19 +77,22 @@ namespace MinimalFirewall
             if (expiredRules.Count != 0)
             {
                 var ruleNamesToRemove = expiredRules.Keys.ToList();
-                try
+                var result = _ruleLifecycleBackend.DeleteByName(ruleNamesToRemove);
+                if (!result.Succeeded)
                 {
-                    FirewallRuleService.DeleteRulesByName(ruleNamesToRemove);
-                    foreach (var ruleName in ruleNamesToRemove)
-                    {
-                        _temporaryRuleManager.Remove(ruleName);
-                    }
-                    activityLogger.LogDebug($"Cleaned up {ruleNamesToRemove.Count} expired temporary rules on startup.");
+                    activityLogger.LogDebug(
+                        string.IsNullOrWhiteSpace(result.Error)
+                            ? "CleanupTemporaryRulesOnStartup failed."
+                            : $"CleanupTemporaryRulesOnStartup failed. {result.Error}");
+                    return;
                 }
-                catch (COMException ex)
+
+                foreach (var ruleName in ruleNamesToRemove)
                 {
-                    activityLogger.LogException("CleanupTemporaryRulesOnStartup", ex);
+                    _temporaryRuleManager.Remove(ruleName);
                 }
+
+                activityLogger.LogDebug($"Cleaned up {ruleNamesToRemove.Count} expired temporary rules on startup.");
             }
         }
 
@@ -329,35 +334,40 @@ namespace MinimalFirewall
             }
         }
 
-        private void ExecuteRuleDeletion(List<string> items, Action<List<string>> deleteAction, string logPrefix)
+        private void ExecuteRuleDeletion(
+            IReadOnlyList<string> items,
+            Func<IReadOnlyList<string>, FirewallRuleLifecycleOperationResult> deleteAction,
+            string logPrefix)
         {
             if (items.Count == 0)
             {
                 return;
             }
 
-            try
+            var result = deleteAction(items);
+            if (!result.Succeeded)
             {
-                deleteAction(items);
-                foreach (var item in items)
-                {
-                    activityLogger.LogChange($"{logPrefix} Deleted", item);
-                }
+                activityLogger.LogDebug(
+                    string.IsNullOrWhiteSpace(result.Error)
+                        ? $"Delete{logPrefix.Replace(" ", "")}s failed for {string.Join(",", items)}."
+                        : $"Delete{logPrefix.Replace(" ", "")}s failed for {string.Join(",", items)}. {result.Error}");
+                return;
             }
-            catch (COMException ex)
+
+            foreach (var item in items)
             {
-                activityLogger.LogException($"Delete{logPrefix.Replace(" ", "")}s for {string.Join(",", items)}", ex);
+                activityLogger.LogChange($"{logPrefix} Deleted", item);
             }
         }
 
         public void DeleteApplicationRules(List<string> appPaths) =>
-            ExecuteRuleDeletion(appPaths, items => { FirewallRuleService.DeleteRulesByPath(items); }, "Rule");
+            ExecuteRuleDeletion(appPaths, _ruleLifecycleBackend.DeleteByPath, "Rule");
 
         public void DeleteUwpRules(List<string> packageFamilyNames) =>
-            ExecuteRuleDeletion(packageFamilyNames, items => { FirewallRuleService.DeleteUwpRules(items); }, "UWP Rule");
+            ExecuteRuleDeletion(packageFamilyNames, _ruleLifecycleBackend.DeleteUwp, "UWP Rule");
 
         public void DeleteAdvancedRules(List<string> ruleNames) =>
-            ExecuteRuleDeletion(ruleNames, items => { FirewallRuleService.DeleteRulesByName(items); }, "Advanced Rule");
+            ExecuteRuleDeletion(ruleNames, _ruleLifecycleBackend.DeleteByName, "Advanced Rule");
 
         public void DeleteRulesForWildcard(WildcardRule wildcard)
         {
@@ -366,16 +376,18 @@ namespace MinimalFirewall
                 return;
             }
 
-            try
+            string descriptionTag = $"{MFWConstants.WildcardDescriptionPrefix}{wildcard.FolderPath}]";
+            var result = _ruleLifecycleBackend.DeleteByDescription(descriptionTag);
+            if (!result.Succeeded)
             {
-                string descriptionTag = $"{MFWConstants.WildcardDescriptionPrefix}{wildcard.FolderPath}]";
-                FirewallRuleService.DeleteRulesByDescription(descriptionTag);
-                activityLogger.LogChange("Wildcard Rules Deleted", $"Deleted rules for folder {wildcard.FolderPath}");
+                activityLogger.LogDebug(
+                    string.IsNullOrWhiteSpace(result.Error)
+                        ? $"DeleteRulesForWildcard failed for {wildcard.FolderPath}."
+                        : $"DeleteRulesForWildcard failed for {wildcard.FolderPath}. {result.Error}");
+                return;
             }
-            catch (COMException ex)
-            {
-                activityLogger.LogException($"DeleteRulesForWildcard for {wildcard.FolderPath}", ex);
-            }
+
+            activityLogger.LogChange("Wildcard Rules Deleted", $"Deleted rules for folder {wildcard.FolderPath}");
         }
 
 
@@ -756,17 +768,22 @@ namespace MinimalFirewall
             {
                 try
                 {
-                    FirewallRuleService.DeleteRulesByName([ruleName]);
+                    var result = _ruleLifecycleBackend.DeleteByName([ruleName]);
+                    if (!result.Succeeded)
+                    {
+                        activityLogger.LogDebug(
+                            string.IsNullOrWhiteSpace(result.Error)
+                                ? $"Deleting temporary rule {ruleName} failed."
+                                : $"Deleting temporary rule {ruleName} failed. {result.Error}");
+                        return;
+                    }
+
                     _temporaryRuleManager.Remove(ruleName);
                     if (_temporaryRuleTimers.TryRemove(ruleName, out var t))
                     {
                         t.Dispose();
                     }
                     activityLogger.LogDebug($"Temporary rule {ruleName} expired and was removed.");
-                }
-                catch (COMException ex)
-                {
-                    activityLogger.LogException($"Deleting temporary rule {ruleName}", ex);
                 }
             }, null, duration, Timeout.InfiniteTimeSpan);
             _temporaryRuleTimers[ruleName] = timer;
@@ -813,13 +830,17 @@ namespace MinimalFirewall
         {
             if (change.Rule is { Name: string ruleName })
             {
-                if (enable)
+                var result = enable
+                    ? _ruleLifecycleBackend.EnableByName(ruleName)
+                    : _ruleLifecycleBackend.DisableByName(ruleName);
+
+                if (!result.Succeeded)
                 {
-                    firewallService.EnableRuleByName(ruleName);
-                }
-                else
-                {
-                    firewallService.DisableRuleByName(ruleName);
+                    activityLogger.LogDebug(
+                        string.IsNullOrWhiteSpace(result.Error)
+                            ? $"Foreign Rule {logAction} failed for '{ruleName}'."
+                            : $"Foreign Rule {logAction} failed for '{ruleName}'. {result.Error}");
+                    return;
                 }
 
                 activityLogger.LogChange($"Foreign Rule {logAction}", ruleName);
@@ -1270,30 +1291,32 @@ namespace MinimalFirewall
         {
             await Task.Run(() =>
             {
-                try
+                activityLogger.LogDebug($"Deleting all rules in group: {groupName}");
+                var result = _ruleLifecycleBackend.DeleteByGroup(groupName);
+                if (!result.Succeeded)
                 {
-                    activityLogger.LogDebug($"Deleting all rules in group: {groupName}");
-                    FirewallRuleService.DeleteRulesByGroup(groupName);
-                }
-                catch (COMException ex)
-                {
-                    activityLogger.LogException($"DeleteGroupAsync for {groupName}", ex);
+                    activityLogger.LogDebug(
+                        string.IsNullOrWhiteSpace(result.Error)
+                            ? $"DeleteGroupAsync failed for {groupName}."
+                            : $"DeleteGroupAsync failed for {groupName}. {result.Error}");
                 }
             });
         }
 
         public void DeleteAllMfwRules()
         {
-            try
+            var result = _ruleLifecycleBackend.DeleteAllMfwRules();
+            if (!result.Succeeded)
             {
-                FirewallRuleService.DeleteAllMfwRules();
-                _wildcardRuleService.ClearRules();
-                activityLogger.LogChange("Bulk Delete", "All Minimal Firewall rules deleted by user.");
+                activityLogger.LogDebug(
+                    string.IsNullOrWhiteSpace(result.Error)
+                        ? "DeleteAllMfwRules failed."
+                        : $"DeleteAllMfwRules failed. {result.Error}");
+                return;
             }
-            catch (COMException ex)
-            {
-                activityLogger.LogException("DeleteAllMfwRules", ex);
-            }
+
+            _wildcardRuleService.ClearRules();
+            activityLogger.LogChange("Bulk Delete", "All Minimal Firewall rules deleted by user.");
         }
 
         public void UpdateWildcardRule(WildcardRule oldRule, WildcardRule newRule)
