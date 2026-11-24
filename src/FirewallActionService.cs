@@ -526,6 +526,24 @@ namespace MinimalFirewall
                 return;
             }
 
+            if (newLockdownState)
+            {
+                try
+                {
+                    EnableLockdownAuditPolicy();
+                }
+                catch (Exception ex)
+                {
+                    activityLogger.LogException("EnableLockdownAuditPolicy", ex);
+                    TryRestoreLockdownAuditPolicy();
+                    ShowLockdownMessage(
+                        "Windows Security Auditing could not be enabled, so Lockdown was not changed.\\n\\n" +
+                        (string.IsNullOrWhiteSpace(ex.Message) ? "Check the audit policy permissions and any active Group Policy." : ex.Message),
+                        "Lockdown Mode Failed");
+                    return;
+                }
+            }
+
             if (newLockdownState && !VerifyLockdownAuditPolicy())
             {
                 ShowLockdownMessage(
@@ -557,6 +575,15 @@ namespace MinimalFirewall
                         "Firewall Policy Error");
                 }
 
+                if (rollbackSucceeded)
+                {
+                    TryRestoreLockdownAuditPolicy();
+                }
+                else
+                {
+                    activityLogger.LogDebug("Retaining the temporary audit policy because the firewall rollback did not succeed.");
+                }
+
                 activityLogger.LogDebug("Lockdown Mode Failed: Could not enable audit policy.");
                 return;
             }
@@ -583,6 +610,16 @@ namespace MinimalFirewall
                         ? "Failed to change the default outbound policy."
                         : applySummary),
                     "Lockdown Error");
+
+                if (newLockdownState && applyResult?.RollbackIncomplete != true)
+                {
+                    TryRestoreLockdownAuditPolicy();
+                }
+                else if (newLockdownState)
+                {
+                    activityLogger.LogDebug("Retaining the temporary audit policy because firewall rollback was incomplete.");
+                }
+
                 return;
             }
 
@@ -591,21 +628,30 @@ namespace MinimalFirewall
 
         protected virtual void PrepareLockdownPrerequisites(bool enableLockdown)
         {
-            try
-            {
-                AdminTaskService.SetAuditPolicy(enableLockdown);
-            }
-            catch (System.ComponentModel.Win32Exception ex)
-            {
-                activityLogger.LogException("SetAuditPolicy", ex);
-            }
-
             if (!ManageCryptoServiceRule(enableLockdown) ||
                 !ManageDhcpClientRule(enableLockdown) ||
                 !ManageWslRules(enableLockdown))
             {
                 throw new InvalidOperationException(
                     "One or more system firewall rules could not be prepared for the requested Lockdown state.");
+            }
+        }
+
+        protected virtual void EnableLockdownAuditPolicy()
+            => AdminTaskService.SetAuditPolicy(enable: true);
+
+        protected virtual void RestoreLockdownAuditPolicy()
+            => AdminTaskService.SetAuditPolicy(enable: false);
+
+        private void TryRestoreLockdownAuditPolicy()
+        {
+            try
+            {
+                RestoreLockdownAuditPolicy();
+            }
+            catch (Exception ex)
+            {
+                activityLogger.LogException("RestoreLockdownAuditPolicy", ex);
             }
         }
 
