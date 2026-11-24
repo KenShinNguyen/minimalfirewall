@@ -116,5 +116,10 @@ public sealed class FirewallRuleLifecycleErrorObservabilityTests
         public FirewallRuleLifecycleOperationResult DeleteAllMfwRules() => failure;
         public FirewallRuleLifecycleOperationResult EnableByName(string ruleName) => failure;
         public FirewallRuleLifecycleOperationResult DisableByName(string ruleName) => failure;
+
+        public FirewallRuleLifecycleOperationResult DeleteConflictingServiceRules(
+            string serviceName,
+            MinimalFirewall.TypedObjects.Actions newAction,
+            MinimalFirewall.TypedObjects.Directions newDirection) => failure;
     }
 }
