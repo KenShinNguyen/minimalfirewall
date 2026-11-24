@@ -354,6 +354,7 @@ namespace MinimalFirewall
 
             return startInfo;
         }
+
         public static void RunHiddenCommand(string fileName, string arguments, out string output, out string error)
         {
             string safePath = Path.IsPathRooted(fileName) ? fileName : GetWindowsSystemExecutablePath(fileName);
