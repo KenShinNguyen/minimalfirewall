@@ -48,7 +48,7 @@ public sealed class RotatingFileAppLogger : IAppLogger
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Debug.WriteLine($"[LoggerFallback] Failed to write log: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[LoggerFallback] Failed to write log: {ex.Message}");
         }
     }
 
