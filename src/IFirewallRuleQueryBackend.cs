@@ -1,4 +1,5 @@
 using System;
+using MinimalFirewall.TypedObjects;
 using System.Collections.Generic;
 
 namespace MinimalFirewall;
