@@ -162,7 +162,7 @@ namespace MinimalFirewall
             return string.IsNullOrEmpty(cn) ? subject : cn;
         }
 
-        private static bool VerifyWithWinTrust(string filePath)
+        private static bool VerifyWithWinTrust(string filePath, uint revocationChecks = WTD_REVOKE_WHOLECHAIN, uint providerFlags = WTD_REVOCATION_CHECK_CHAIN)
         {
             IntPtr pFilePath = IntPtr.Zero;
             IntPtr pFileInfo = IntPtr.Zero;
@@ -193,13 +193,13 @@ namespace MinimalFirewall
                     // Revoked code-signing certs (the standard response to cert theft) must not
                     // pass the auto-allow gate. If revocation status can't be determined
                     // (e.g. offline), the check fails and the user gets a prompt instead.
-                    fdwRevocationChecks = WTD_REVOKE_WHOLECHAIN,
+                    fdwRevocationChecks = revocationChecks,
                     dwUnionChoice = WTD_CHOICE_FILE,
                     pUnion = pFileInfo,
                     dwStateAction = WTD_STATEACTION_IGNORE,
                     hWVTStateData = IntPtr.Zero,
                     pwszURLReference = IntPtr.Zero,
-                    dwProvFlags = WTD_REVOCATION_CHECK_CHAIN,
+                    dwProvFlags = providerFlags,
                     dwUIContext = 0,
                     pSignatureSettings = IntPtr.Zero
                 };
