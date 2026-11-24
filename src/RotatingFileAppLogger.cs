@@ -27,6 +27,11 @@ public sealed class RotatingFileAppLogger : IAppLogger
         _logFilePath = logFilePath; MinimumLevel = minimumLevel; _maxFileBytes = maxFileBytes; _maxTotalFiles = maxTotalFiles; _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
+    public void Debug(string category, string message) => Log(AppLogLevel.Debug, category, message);
+    public void Info(string category, string message) => Log(AppLogLevel.Info, category, message);
+    public void Warning(string category, string message, Exception? exception = null) => Log(AppLogLevel.Warning, category, message, exception);
+    public void Error(string category, string message, Exception? exception = null, string? errorId = null) => Log(AppLogLevel.Error, category, message, exception, errorId);
+
     public void Log(AppLogLevel level, string category, string message, Exception? exception = null, string? errorId = null)
     {
         if (level < MinimumLevel) return;
