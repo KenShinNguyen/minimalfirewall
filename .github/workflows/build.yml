@@ -39,6 +39,11 @@ jobs:
       - name: Summarize code coverage
         if: success()
         shell: pwsh
+        env:
+          # Baseline from two successful Windows runs: 12.97% lines / 10.61% branches.
+          # Keep a buffer for routine changes outside covered business paths.
+          MIN_LINE_COVERAGE: "10"
+          MIN_BRANCH_COVERAGE: "8"
         run: .github/scripts/write-coverage-summary.ps1
 
       - name: Upload Cobertura coverage artifact
