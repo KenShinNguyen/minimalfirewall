@@ -157,7 +157,10 @@ public sealed class FirewallRuleGroupBoundaryTests
         ];
 
         public FirewallRuleGroupResult<IReadOnlyList<FirewallRuleGroupSnapshot>> GetGroupsResult { get; init; } =
-            FirewallRuleGroupResult<IReadOnlyList<FirewallRuleGroupSnapshot>>.Success(Groups);
+            FirewallRuleGroupResult<IReadOnlyList<FirewallRuleGroupSnapshot>>.Success(
+            [
+                new FirewallRuleGroupSnapshot("@FirewallAPI.dll,-28752", 2, true)
+            ]);
 
         public FirewallRuleGroupResult<int> SetGroupEnabledResult { get; init; } =
             FirewallRuleGroupResult<int>.Success(0);
