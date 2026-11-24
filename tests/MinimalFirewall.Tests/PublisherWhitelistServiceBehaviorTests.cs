@@ -88,6 +88,25 @@ public sealed class PublisherWhitelistServiceBehaviorTests
     }
 
     [Fact]
+    public void AddingCertificateUpgradesLegacySchemaWithoutReEnablingNameOnlyTrust()
+    {
+        using var storage = new TemporaryPublisherStorage();
+        File.WriteAllText(storage.FilePath, """["Acme Corporation"]""");
+
+        var service = storage.CreateService();
+        service.AddTrustedCertificate(ThumbprintA, "Acme Corporation", "CN=Acme Corporation, O=Acme Ltd");
+
+        var reloaded = storage.CreateService();
+
+        Assert.True(reloaded.IsCertificateTrusted(ThumbprintA));
+        Assert.False(reloaded.IsCertificateTrusted("Acme Corporation"));
+        var entries = reloaded.GetTrustedPublishers();
+        Assert.Equal(2, entries.Count);
+        Assert.Contains(entries, entry => entry.IsLegacy && entry.DisplayName == "Acme Corporation");
+        Assert.Contains(entries, entry => !entry.IsLegacy && entry.Sha256Thumbprint == ThumbprintA);
+    }
+
+    [Fact]
     public void Add_InvalidThumbprintOrEmptyMetadata_IsIgnored()
     {
         using var storage = new TemporaryPublisherStorage();
