@@ -258,6 +258,32 @@ private static void SetRuleEnabledState(string ruleName, bool isEnabled, string 
             }
         }
 
+    public FirewallRuleLifecycleOperationResult DeleteConflictingServiceRules(string serviceName, Actions newAction, Directions newDirection)
+        => Execute(() => DeleteConflictingServiceRulesCore(serviceName, newAction, newDirection), "delete conflicting service rules");
+
+    private static void DeleteConflictingServiceRulesCore(string serviceName, Actions newAction, Directions newDirection)
+    {
+        if (string.IsNullOrEmpty(serviceName))
+        {
+            return;
+        }
+
+        var conflictingAction = newAction == Actions.Allow
+            ? NET_FW_ACTION_.NET_FW_ACTION_BLOCK
+            : NET_FW_ACTION_.NET_FW_ACTION_ALLOW;
+        var conflictingDirection = (NET_FW_RULE_DIRECTION_)newDirection;
+
+        var rulesToRemove = GetRuleNamesAndRelease(rule =>
+            string.Equals(rule.serviceName, serviceName, StringComparison.OrdinalIgnoreCase) &&
+            (rule.Direction == conflictingDirection || rule.Direction == NET_FW_RULE_DIRECTION_.NET_FW_RULE_DIR_MAX) &&
+            rule.Action == conflictingAction);
+
+        if (rulesToRemove.Count > 0)
+        {
+            DeleteRulesByName(rulesToRemove);
+        }
+    }
+
     public FirewallRuleLifecycleOperationResult DeleteByPath(IReadOnlyList<string> appPaths)
         => Execute(() => DeleteRulesByPath([.. appPaths]), "delete rules by path");
 
