@@ -90,7 +90,55 @@ namespace MinimalFirewall
             return !string.IsNullOrEmpty(publisherName);
         }
 
-        private static string? NormalizePublisherName(string? subject)
+        /// <summary>
+        /// Returns the trusted embedded signer identity for publisher-whitelist matching.
+        /// Catalog-signed files without an extractable embedded signer certificate are
+        /// intentionally not eligible for certificate-specific whitelisting.
+        /// </summary>
+        public static bool TryGetPublisherIdentity(
+            string filePath,
+            out PublisherCertificateIdentity? publisherIdentity)
+        {
+            publisherIdentity = null;
+
+            if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath) || !VerifyWithWinTrust(filePath))
+            {
+                return false;
+            }
+
+            try
+            {
+#pragma warning disable SYSLIB0057 // CreateFromSignedFile has no direct replacement for Authenticode signer extraction
+                using var basicCert = X509Certificate.CreateFromSignedFile(filePath);
+                using var cert = new X509Certificate2(basicCert);
+#pragma warning restore SYSLIB0057
+
+                string sha256Thumbprint = cert.GetCertHashString(HashAlgorithmName.SHA256);
+                if (string.IsNullOrWhiteSpace(sha256Thumbprint))
+                {
+                    return false;
+                }
+
+                publisherIdentity = new PublisherCertificateIdentity(
+                    sha256Thumbprint,
+                    cert.Subject,
+                    cert.Issuer);
+                return true;
+            }
+            catch (CryptographicException)
+            {
+                // Do not fall back to PE CompanyName for a security identity. Metadata is
+                // display-only and can be changed without changing the signing certificate.
+                return false;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                Debug.WriteLine($"[INFO] Signer identity extraction failed for {filePath}: {ex.Message}");
+                return false;
+            }
+        }
+
+        internal static string? NormalizePublisherName(string? subject)
         {
             if (string.IsNullOrEmpty(subject))
             {
