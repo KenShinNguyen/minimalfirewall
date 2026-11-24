@@ -72,67 +72,65 @@ public interface IFirewallRuleCreationBackend
 }
 
 /// <summary>
-/// Maps the pure C# rule model to the exact Windows Firewall values used by the COM backend.
-/// Kept public so the mapping can be locked by unit tests without instantiating COM.
+/// Pure C# validation/normalization helpers for the rule-creation boundary.
+/// Windows COM enum mapping stays inside WindowsFirewallRuleCreationBackend.
 /// </summary>
 public static class FirewallRuleCreationMapper
 {
-    public static NET_FW_ACTION_ MapAction(FirewallRuleCreationAction action) =>
+    public static int MapActionValue(FirewallRuleCreationAction action) =>
         action switch
         {
-            FirewallRuleCreationAction.Allow => NET_FW_ACTION_.NET_FW_ACTION_ALLOW,
-            FirewallRuleCreationAction.Block => NET_FW_ACTION_.NET_FW_ACTION_BLOCK,
+            FirewallRuleCreationAction.Allow => 1,
+            FirewallRuleCreationAction.Block => 0,
             _ => throw new ArgumentException($"Unsupported firewall action: {action}", nameof(action))
         };
 
-    public static NET_FW_RULE_DIRECTION_ MapDirection(FirewallRuleCreationDirection direction) =>
+    public static int MapDirectionValue(FirewallRuleCreationDirection direction) =>
         direction switch
         {
-            FirewallRuleCreationDirection.Incoming => NET_FW_RULE_DIRECTION_.NET_FW_RULE_DIR_IN,
-            FirewallRuleCreationDirection.Outgoing => NET_FW_RULE_DIRECTION_.NET_FW_RULE_DIR_OUT,
+            FirewallRuleCreationDirection.Incoming => 1,
+            FirewallRuleCreationDirection.Outgoing => 2,
             _ => throw new ArgumentException($"Unsupported firewall direction: {direction}", nameof(direction))
         };
 
     public static int MapProtocol(int protocol) =>
         protocol switch
         {
-            1 => 1,   // ICMPv4
-            2 => 2,   // IGMP
-            6 => 6,   // TCP
-            17 => 17, // UDP
-            58 => 58, // ICMPv6
-            256 => 256, // Any
+            1 => 1,
+            2 => 2,
+            6 => 6,
+            17 => 17,
+            58 => 58,
+            256 => 256,
             _ when protocol >= 0 && protocol <= 255 => protocol,
             _ => throw new ArgumentException($"Unsupported firewall protocol: {protocol}", nameof(protocol))
         };
 
-    public static NET_FW_PROFILE_TYPE2_ MapProfileMask(FirewallRuleCreationProfile profile)
+    public static int MapProfileMask(FirewallRuleCreationProfile profile)
     {
         if (profile == FirewallRuleCreationProfile.All)
         {
-            return NET_FW_PROFILE_TYPE2_.NET_FW_PROFILE2_ALL;
+            return int.MaxValue;
         }
 
-        NET_FW_PROFILE_TYPE2_ result = 0;
+        var result = 0;
 
         if ((profile & FirewallRuleCreationProfile.Domain) != 0)
         {
-            result |= NET_FW_PROFILE_TYPE2_.NET_FW_PROFILE2_DOMAIN;
+            result |= 1;
         }
 
         if ((profile & FirewallRuleCreationProfile.Private) != 0)
         {
-            result |= NET_FW_PROFILE_TYPE2_.NET_FW_PROFILE2_PRIVATE;
+            result |= 2;
         }
 
         if ((profile & FirewallRuleCreationProfile.Public) != 0)
         {
-            result |= NET_FW_PROFILE_TYPE2_.NET_FW_PROFILE2_PUBLIC;
+            result |= 4;
         }
 
-        return result == 0
-            ? NET_FW_PROFILE_TYPE2_.NET_FW_PROFILE2_ALL
-            : result;
+        return result == 0 ? int.MaxValue : result;
     }
 
     public static FirewallRuleCreationProfile ParseProfiles(string? profiles)
@@ -143,7 +141,7 @@ public static class FirewallRuleCreationMapper
             return FirewallRuleCreationProfile.All;
         }
 
-        FirewallRuleCreationProfile result = FirewallRuleCreationProfile.None;
+        var result = FirewallRuleCreationProfile.None;
         foreach (var token in profiles.Split([',', '|', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             result |= token switch
