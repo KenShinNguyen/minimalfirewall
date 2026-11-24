@@ -114,56 +114,7 @@ namespace MinimalFirewall
             }
         }
 
-        private static List<string> GetRuleNamesAndRelease(Func<INetFwRule2, bool> predicate)
-        {
-            var matchedNames = new List<string>();
-            INetFwPolicy2 firewallPolicy = GetLocalPolicy();
-            if (firewallPolicy?.Rules == null)
-            {
-                return matchedNames;
-            }
-
-            var comRules = firewallPolicy.Rules;
-            try
-            {
-                foreach (INetFwRule2 rule in comRules)
-                {
-                    try
-                    {
-                        if (rule != null && predicate(rule))
-                        {
-                            matchedNames.Add(rule.Name);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"[WARN] Error checking rule predicate: {ex.Message}");
-                    }
-                    finally
-                    {
-                        if (rule != null)
-                        {
-                            Marshal.ReleaseComObject(rule);
-                        }
-                    }
-                }
-            }
-            finally
-            {
-                if (comRules != null)
-                {
-                    Marshal.ReleaseComObject(comRules);
-                }
-
-                if (firewallPolicy != null)
-                {
-                    Marshal.ReleaseComObject(firewallPolicy);
-                }
-            }
-            return matchedNames;
-        }
-
-        /// <summary>
+                /// <summary>
         /// Looks up a rule and hands back a disposable handle, so the caller cannot forget the
         /// matching release. Prefer this over letting a raw COM interface escape the service.
         /// </summary>
@@ -531,27 +482,94 @@ namespace MinimalFirewall
 
         private static List<string> ExecuteDeleteAndReturnNames(Func<INetFwRule2, bool> predicate)
         {
-            var rulesToRemove = GetRuleNamesAndRelease(predicate);
-            DeleteRulesByName(rulesToRemove);
+            var rulesToRemove = new List<string>();
+            INetFwPolicy2 firewallPolicy = GetLocalPolicy();
+            if (firewallPolicy?.Rules == null)
+            {
+                return rulesToRemove;
+            }
+
+            var comRules = firewallPolicy.Rules;
+            try
+            {
+                foreach (INetFwRule2 rule in comRules)
+                {
+                    try
+                    {
+                        if (rule != null && predicate(rule))
+                        {
+                            rulesToRemove.Add(rule.Name);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[WARN] ExecuteDeleteAndReturnNames: Error checking firewall rule: {ex.Message}");
+                    }
+                    finally
+                    {
+                        if (rule != null)
+                        {
+                            Marshal.ReleaseComObject(rule);
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                if (comRules != null)
+                {
+                    Marshal.ReleaseComObject(comRules);
+                }
+
+                if (firewallPolicy != null)
+                {
+                    Marshal.ReleaseComObject(firewallPolicy);
+                }
+            }
+
+            if (rulesToRemove.Count == 0)
+            {
+                return rulesToRemove;
+            }
+
+            INetFwPolicy2 deletePolicy = GetLocalPolicy();
+            INetFwRules? deleteRules = null;
+            try
+            {
+                deleteRules = deletePolicy.Rules;
+                foreach (var ruleName in rulesToRemove)
+                {
+                    try
+                    {
+                        deleteRules.Remove(ruleName);
+                    }
+                    catch (FileNotFoundException)
+                    {
+                        Debug.WriteLine($"[WARN] ExecuteDeleteAndReturnNames: Rule '{ruleName}' not found for removal.");
+                    }
+                    catch (COMException ex)
+                    {
+                        Debug.WriteLine($"[ERROR] ExecuteDeleteAndReturnNames ('{ruleName}'): Failed. HResult: 0x{ex.HResult:X8}. Message: {ex.Message}");
+                    }
+                }
+            }
+            finally
+            {
+                if (deleteRules != null)
+                {
+                    Marshal.ReleaseComObject(deleteRules);
+                }
+
+                if (deletePolicy != null)
+                {
+                    Marshal.ReleaseComObject(deletePolicy);
+                }
+            }
+
             return rulesToRemove;
         }
 
-        public static List<string> DeleteRulesByPath(List<string> appPaths)
-        {
-            if (appPaths.Count == 0)
-            {
-                return [];
-            }
-
-            var pathSet = new HashSet<string>(appPaths.Select(PathResolver.NormalizePath), StringComparer.OrdinalIgnoreCase);
-
-            return ExecuteDeleteAndReturnNames(rule =>
-                !string.IsNullOrEmpty(rule.ApplicationName) &&
-                pathSet.Contains(PathResolver.NormalizePath(rule.ApplicationName))
-            );
-        }
-
-        public static List<string> DeleteRulesByServiceName(string serviceName)
+                        public static List<string> DeleteRulesByServiceName(string serviceName)
         {
             if (string.IsNullOrEmpty(serviceName))
             {
@@ -579,85 +597,7 @@ namespace MinimalFirewall
             );
         }
 
-        public static List<string> DeleteUwpRules(List<string> packageFamilyNames)
-        {
-            if (packageFamilyNames.Count == 0)
-            {
-                return [];
-            }
-
-            var pfnSet = new HashSet<string>(packageFamilyNames, StringComparer.OrdinalIgnoreCase);
-
-            return ExecuteDeleteAndReturnNames(rule =>
-            {
-                if (rule.Description?.StartsWith(MFWConstants.UwpDescriptionPrefix, StringComparison.Ordinal) == true)
-                {
-                    string pfnInRule = rule.Description[MFWConstants.UwpDescriptionPrefix.Length..];
-                    return pfnSet.Contains(pfnInRule);
-                }
-                return false;
-            });
-        }
-
-        public static void DeleteRulesByName(List<string> ruleNames)
-        {
-            if (ruleNames.Count == 0)
-            {
-                return;
-            }
-
-            INetFwPolicy2 firewallPolicy = GetLocalPolicy();
-            if (firewallPolicy?.Rules == null)
-            {
-                return;
-            }
-
-            var rulesCollection = firewallPolicy.Rules;
-            try
-            {
-                foreach (var name in ruleNames)
-                {
-                    try
-                    {
-                        rulesCollection.Remove(name);
-                    }
-                    catch (FileNotFoundException)
-                    {
-                        Debug.WriteLine($"[WARN] DeleteRulesByName: Rule '{name}' not found for removal.");
-                    }
-                    catch (COMException ex)
-                    {
-                        Debug.WriteLine($"[ERROR] DeleteRulesByName ('{name}'): Failed. HResult: 0x{ex.HResult:X8}. Message: {ex.Message}");
-                        if (ex.HResult == E_ACCESSDENIED)
-                        {
-                            Debug.WriteLine($"[ERROR] DeleteRulesByName ('{name}'): Access Denied.");
-                        }
-                        else if (ex.HResult == HRESULT_FROM_WIN32_ERROR_FILE_NOT_FOUND)
-                        {
-                            Debug.WriteLine($"[WARN] DeleteRulesByName: Rule '{name}' not found (reported via COMException HResult).");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"[ERROR] DeleteRulesByName ('{name}'): Unexpected error during removal. Type: {ex.GetType().Name}. Message: {ex.Message}");
-                    }
-                }
-            }
-            finally
-            {
-                if (rulesCollection != null)
-                {
-                    Marshal.ReleaseComObject(rulesCollection);
-                }
-
-                if (firewallPolicy != null)
-                {
-                    Marshal.ReleaseComObject(firewallPolicy);
-                }
-            }
-        }
-
-        public static void CreateRule(INetFwRule2 rule)
+                        public static void CreateRule(INetFwRule2 rule)
         {
             INetFwPolicy2 firewallPolicy = GetLocalPolicy();
             INetFwRules? rulesCollection = null;
@@ -748,96 +688,6 @@ namespace MinimalFirewall
             }
         }
 
-        public static List<string> DeleteRulesByDescription(string description)
-        {
-            if (string.IsNullOrEmpty(description))
-            {
-                return [];
+                                        
             }
-
-            return ExecuteDeleteAndReturnNames(rule => string.Equals(rule.Description, description, StringComparison.OrdinalIgnoreCase));
-        }
-
-        public static List<string> DeleteRulesByGroup(string groupName)
-        {
-            if (string.IsNullOrEmpty(groupName))
-            {
-                return [];
-            }
-
-            return ExecuteDeleteAndReturnNames(rule => string.Equals(rule.Grouping, groupName, StringComparison.OrdinalIgnoreCase));
-        }
-
-        public static void DeleteAllMfwRules()
-        {
-            var rulesToRemove = GetRuleNamesAndRelease(rule =>
-                !string.IsNullOrEmpty(rule.Grouping) &&
-                (rule.Grouping.EndsWith(MFWConstants.MfwRuleSuffix) ||
-                 rule.Grouping == MFWConstants.MainRuleGroup ||
-                 rule.Grouping == MFWConstants.WildcardRuleGroup)
-            );
-
-            Debug.WriteLine($"[INFO] DeleteAllMfwRules: Identified {rulesToRemove.Count} MFW rules for deletion.");
-
-            if (rulesToRemove.Count > 0)
-            {
-                DeleteRulesByName(rulesToRemove);
-                Debug.WriteLine($"[INFO] DeleteAllMfwRules: Requested deletion of {rulesToRemove.Count} MFW rules.");
-            }
-        }
-
-        private static void SetRuleEnabledState(string ruleName, bool isEnabled, string callerName)
-        {
-            if (string.IsNullOrEmpty(ruleName))
-            {
-                return;
-            }
-
-            INetFwPolicy2 firewallPolicy = GetLocalPolicy();
-            if (firewallPolicy == null)
-            {
-                return;
-            }
-
-            INetFwRules? rulesCollection = null;
-            try
-            {
-                rulesCollection = firewallPolicy.Rules;
-                if (rulesCollection == null)
-                {
-                    return;
-                }
-
-                if (rulesCollection.Item(ruleName) is INetFwRule2 rule)
-                {
-                    rule.Enabled = isEnabled;
-                    Marshal.ReleaseComObject(rule);
-                }
-            }
-            catch (FileNotFoundException)
-            {
-                Debug.WriteLine($"[WARN] {callerName}: Rule '{ruleName}' not found.");
-            }
-            catch (COMException ex)
-            {
-                Debug.WriteLine($"[ERROR] {callerName} ('{ruleName}'): Failed. HResult: 0x{ex.HResult:X8}. Message: {ex.Message}");
-            }
-            finally
-            {
-                if (rulesCollection != null)
-                {
-                    Marshal.ReleaseComObject(rulesCollection);
-                }
-
-                if (firewallPolicy != null)
-                {
-                    Marshal.ReleaseComObject(firewallPolicy);
-                }
-            }
-        }
-
-        public void DisableRuleByName(string ruleName) => SetRuleEnabledState(ruleName, false, nameof(DisableRuleByName));
-
-        public void EnableRuleByName(string ruleName) => SetRuleEnabledState(ruleName, true, nameof(EnableRuleByName));
-    }
 }

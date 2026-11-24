@@ -5,6 +5,12 @@ namespace MinimalFirewall;
 
 public sealed class WindowsSystemFirewallRuleBackend : ISystemFirewallRuleBackend
 {
+    private readonly IFirewallRuleLifecycleBackend _lifecycleBackend;
+
+    public WindowsSystemFirewallRuleBackend(IFirewallRuleLifecycleBackend? lifecycleBackend = null)
+    {
+        _lifecycleBackend = lifecycleBackend ?? new WindowsFirewallRuleLifecycleBackend();
+    }
     public SystemFirewallRuleOperationResult EnsureRule(SystemFirewallRuleDefinition definition)
     {
         try
@@ -77,8 +83,10 @@ public sealed class WindowsSystemFirewallRuleBackend : ISystemFirewallRuleBacken
                 return SystemFirewallRuleOperationResult.Success();
             }
 
-            FirewallRuleService.DeleteRulesByName([ruleName]);
-            return SystemFirewallRuleOperationResult.Success();
+            var result = _lifecycleBackend.DeleteByName([ruleName]);
+            return result.Succeeded
+                ? SystemFirewallRuleOperationResult.Success()
+                : SystemFirewallRuleOperationResult.Failure(result.Error ?? "Failed to delete firewall rule.");
         }
         catch (COMException ex)
         {

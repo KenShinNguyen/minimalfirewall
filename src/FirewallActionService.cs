@@ -37,7 +37,7 @@ namespace MinimalFirewall
         private readonly FirewallDataService _dataService = dataService;
         private readonly IFirewallBackend _policyBackend = policyBackend ?? new WindowsFirewallBackend();
         private readonly ISystemFirewallRuleBackend _systemRuleBackend = systemRuleBackend ?? new WindowsSystemFirewallRuleBackend();
-        private readonly IFirewallRuleLifecycleBackend _ruleLifecycleBackend = ruleLifecycleBackend ?? new WindowsFirewallRuleLifecycleBackend(firewallService);
+        private readonly IFirewallRuleLifecycleBackend _ruleLifecycleBackend = ruleLifecycleBackend ?? new WindowsFirewallRuleLifecycleBackend();
         private readonly IFirewallRuleQueryBackend _ruleQueryBackend = ruleQueryBackend ?? new WindowsFirewallRuleQueryBackend();
         private readonly IFirewallRuleCreationBackend _ruleCreationBackend = ruleCreationBackend ?? new WindowsFirewallRuleCreationBackend();
 
@@ -211,7 +211,12 @@ namespace MinimalFirewall
 
                 if (rulesToRemove.Count != 0)
                 {
-                    FirewallRuleService.DeleteRulesByName(rulesToRemove);
+                    var deleteResult = _ruleLifecycleBackend.DeleteByName(rulesToRemove);
+                    if (!deleteResult.Succeeded)
+                    {
+                        LogLifecycleFailure(deleteResult, $"Delete conflicting application rules for {appPath} failed.");
+                        continue;
+                    }
                 }
 
                 string appName = Path.GetFileNameWithoutExtension(appPath);
@@ -312,7 +317,12 @@ namespace MinimalFirewall
             var packageFamilyNames = validApps.Select(app => app.PackageFamilyName).ToList();
             // DeleteUwpRules already removes the old rules; new rules reuse the same
             // names, so deleting the returned names afterwards would destroy them.
-            FirewallRuleService.DeleteUwpRules(packageFamilyNames);
+            var deleteResult = _ruleLifecycleBackend.DeleteUwp(packageFamilyNames);
+            if (!deleteResult.Succeeded)
+            {
+                LogLifecycleFailure(deleteResult, "Delete conflicting UWP rules failed.");
+                return;
+            }
             foreach (var app in validApps)
             {
                 void createRule(string name, Directions dir, Actions act) => CreateUwpRule(name, app.PackageFamilyName, dir, act, ProtocolTypes.Any.Value);
