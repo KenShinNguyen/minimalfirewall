@@ -740,10 +740,17 @@ namespace MinimalFirewall
             activityLogger.LogDebug($"Processing Pending Connection for '{pending.AppPath}'. Decision: {decision}, Duration: {duration}, Trust Publisher: {trustPublisher}");
             var shortSnoozeDuration = TimeSpan.FromSeconds(10);
             var longSnoozeDuration = TimeSpan.FromMinutes(2);
-            if (trustPublisher && SignatureValidationService.IsSignatureTrusted(pending.AppPath, out var publisherName) && !string.IsNullOrEmpty(publisherName))
+            if (trustPublisher &&
+                SignatureValidationService.TryGetTrustedSignerIdentity(pending.AppPath, out var signerIdentity)
+                && signerIdentity != null)
             {
-                _whitelistService.Add(publisherName);
-                activityLogger.LogChange("Publisher Whitelisted", $"Publisher '{publisherName}' was added to the whitelist.");
+                _whitelistService.Add(
+                    signerIdentity.Sha256Thumbprint,
+                    signerIdentity.DisplayName,
+                    signerIdentity.Subject);
+                activityLogger.LogChange(
+                    "Publisher Whitelisted",
+                    $"Signer certificate for '{signerIdentity.DisplayName}' (SHA-256 {signerIdentity.Sha256Thumbprint}) was added to the whitelist.");
             }
             else if (trustPublisher)
             {
