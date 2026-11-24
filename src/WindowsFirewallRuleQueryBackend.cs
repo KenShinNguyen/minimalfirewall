@@ -215,7 +215,7 @@ public sealed class WindowsFirewallRuleQueryBackend : IFirewallRuleQueryBackend
         }
     }
 
-    private static FirewallRuleSnapshot CreateSnapshot(INetFwRule2 rule)
+    internal static FirewallRuleSnapshot CreateSnapshot(INetFwRule2 rule)
         => new(
             rule.Name ?? string.Empty,
             rule.Description ?? string.Empty,
