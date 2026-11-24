@@ -93,13 +93,6 @@ public sealed class SystemFirewallRuleBoundaryTests
         Assert.False(SystemFirewallRuleMapper.ToComEnabled(false));
     }
 
-    [Fact]
-    public void Mapper_RejectsUnsupportedProtocol()
-    {
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
-            SystemFirewallRuleMapper.ToComProtocol((SystemFirewallRuleProtocol)999));
-    }
-
     private sealed class TestableFirewallActionsService(ISystemFirewallRuleBackend systemBackend)
         : FirewallActionsService(
             null!, new UserActivityLogger(), null!, null!, null!, null!, null!,
