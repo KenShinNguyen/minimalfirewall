@@ -7,23 +7,26 @@ namespace MinimalFirewall;
 
 /// <summary>
 /// Windows Firewall implementation of mutable rule updates.
-/// All COM acquisition and release remains inside this backend.
+/// COM acquisition, exception mapping, and release remain inside this backend.
 /// </summary>
 public sealed class WindowsFirewallRuleUpdateBackend : IFirewallRuleUpdateBackend
 {
     private static readonly Type? FwPolicyType = Type.GetTypeFromProgID("HNetCfg.FwPolicy2");
 
-    public void UpdateRemoteAddresses(string ruleName, string newRemoteAddresses)
+    public FirewallRuleUpdateResult UpdateRemoteAddresses(string ruleName, string newRemoteAddresses)
     {
-        if (string.IsNullOrEmpty(ruleName) || string.IsNullOrEmpty(newRemoteAddresses))
+        if (string.IsNullOrWhiteSpace(ruleName) || string.IsNullOrWhiteSpace(newRemoteAddresses))
         {
-            return;
+            return FirewallRuleUpdateResult.Failure(
+                FirewallRuleUpdateErrorCode.InvalidRequest,
+                "Rule name and remote addresses are required.");
         }
 
         if (FwPolicyType is null)
         {
-            Debug.WriteLine("[ERROR] UpdateRemoteAddresses: Firewall policy COM type could not be loaded.");
-            return;
+            return FirewallRuleUpdateResult.Failure(
+                FirewallRuleUpdateErrorCode.FirewallUnavailable,
+                "Windows Firewall policy COM class is unavailable.");
         }
 
         INetFwPolicy2? firewallPolicy = null;
@@ -35,34 +38,63 @@ public sealed class WindowsFirewallRuleUpdateBackend : IFirewallRuleUpdateBacken
             firewallPolicy = (INetFwPolicy2)Activator.CreateInstance(FwPolicyType)!;
             rulesCollection = firewallPolicy.Rules;
 
-            if (rulesCollection.Item(ruleName) is not INetFwRule2 matchedRule)
+            object matchedRuleObject = rulesCollection.Item(ruleName);
+            if (matchedRuleObject is not INetFwRule2 matchedRule)
             {
-                return;
+                ReleaseComObject(matchedRuleObject);
+                return FirewallRuleUpdateResult.Failure(
+                    FirewallRuleUpdateErrorCode.RuleNotFound,
+                    $"Firewall rule '{ruleName}' was not found or cannot be updated.");
             }
 
             rule = matchedRule;
             rule.RemoteAddresses = newRemoteAddresses;
+            return FirewallRuleUpdateResult.Success();
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[ERROR] UpdateRemoteAddresses ('{ruleName}'): Failed. {ex.Message}");
+            var errorCode = FirewallRuleUpdateErrorMapper.FromHResult(ex.HResult);
+            string error = errorCode switch
+            {
+                FirewallRuleUpdateErrorCode.AccessDenied =>
+                    "Windows Firewall denied the rule update. Check administrator permissions.",
+                FirewallRuleUpdateErrorCode.RuleNotFound =>
+                    $"Firewall rule '{ruleName}' was not found.",
+                _ =>
+                    $"Windows Firewall rule update failed: {ex.Message}"
+            };
+
+            Debug.WriteLine(
+                $"[ERROR] UpdateRemoteAddresses ('{ruleName}'): {error} HRESULT: 0x{ex.HResult:X8}.");
+
+            return FirewallRuleUpdateResult.Failure(errorCode, error, ex.HResult);
         }
         finally
         {
-            if (rule != null)
-            {
-                Marshal.ReleaseComObject(rule);
-            }
+            ReleaseComObject(rule);
+            ReleaseComObject(rulesCollection);
+            ReleaseComObject(firewallPolicy);
+        }
+    }
 
-            if (rulesCollection != null)
-            {
-                Marshal.ReleaseComObject(rulesCollection);
-            }
+    private static void ReleaseComObject(object? value)
+    {
+        if (value is null)
+        {
+            return;
+        }
 
-            if (firewallPolicy != null)
+        try
+        {
+            if (Marshal.IsComObject(value))
             {
-                Marshal.ReleaseComObject(firewallPolicy);
+                Marshal.ReleaseComObject(value);
             }
+        }
+        catch (Exception ex)
+        {
+            // Cleanup must not replace the operation result with a second failure.
+            Debug.WriteLine($"[WARN] Could not release a firewall COM object: {ex.Message}");
         }
     }
 }

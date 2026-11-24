@@ -319,8 +319,19 @@ namespace MinimalFirewall
                             {
                                 string newRemoteAddresses = string.Join(",", updatedIps);
                                 _activityLogger.LogDebug($"DNS Refresh: IPs changed for '{rule.Name}'. Updating Windows Firewall.");
-                                _ruleUpdateBackend.UpdateRemoteAddresses(rule.Name, newRemoteAddresses);
-                                rule.RemoteAddresses = newRemoteAddresses; // Update local cache
+                                var updateResult = _ruleUpdateBackend.UpdateRemoteAddresses(rule.Name, newRemoteAddresses);
+                                if (!updateResult.Succeeded)
+                                {
+                                    string hresult = updateResult.HResult.HasValue
+                                        ? $"0x{updateResult.HResult.Value:X8}"
+                                        : "n/a";
+                                    _activityLogger.LogDebug(
+                                        $"DNS Refresh: Could not update '{rule.Name}' [{updateResult.ErrorCode}], HRESULT {hresult}. " +
+                                        $"{updateResult.Error} The previous local rule state was retained.");
+                                    continue;
+                                }
+
+                                rule.RemoteAddresses = newRemoteAddresses; // Update local cache only after backend success
                                 rulesUpdated = true;
                             }
                         }
