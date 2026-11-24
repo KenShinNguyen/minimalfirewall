@@ -49,12 +49,17 @@ public sealed class WindowsFirewallRuleLifecycleBackend : IFirewallRuleLifecycle
         catch (COMException ex)
         {
             return FirewallRuleLifecycleOperationResult.Failure(
-                $"{operationName} failed with HRESULT 0x{ex.HResult:X8}: {ex.Message}");
+                $"{operationName} failed with HRESULT 0x{ex.HResult:X8}: {ex.Message}", ex);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return FirewallRuleLifecycleOperationResult.Failure(
+                $"{operationName} failed with HRESULT 0x{ex.HResult:X8}: {ex.Message}", ex);
         }
         catch (InvalidOperationException ex)
         {
             return FirewallRuleLifecycleOperationResult.Failure(
-                $"{operationName} failed: {ex.Message}");
+                $"{operationName} failed: {ex.Message}", ex);
         }
     }
 }

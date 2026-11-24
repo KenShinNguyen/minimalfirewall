@@ -71,6 +71,19 @@ namespace MinimalFirewall
             }
         }
 
+        private void LogLifecycleFailure(FirewallRuleLifecycleOperationResult result, string message)
+        {
+            if (result.Exception is not null)
+            {
+                // Preserve exception type and HRESULT in the error log instead of downgrading to debug output.
+                activityLogger.LogException(message.TrimEnd('.'), result.Exception);
+                return;
+            }
+
+            activityLogger.LogDebug(
+                string.IsNullOrWhiteSpace(result.Error) ? message : $"{message} {result.Error}");
+        }
+
         public void CleanupTemporaryRulesOnStartup()
         {
             var expiredRules = _temporaryRuleManager.GetExpiredRules();
@@ -80,10 +93,7 @@ namespace MinimalFirewall
                 var result = _ruleLifecycleBackend.DeleteByName(ruleNamesToRemove);
                 if (!result.Succeeded)
                 {
-                    activityLogger.LogDebug(
-                        string.IsNullOrWhiteSpace(result.Error)
-                            ? "CleanupTemporaryRulesOnStartup failed."
-                            : $"CleanupTemporaryRulesOnStartup failed. {result.Error}");
+                    LogLifecycleFailure(result, "CleanupTemporaryRulesOnStartup failed.");
                     return;
                 }
 
@@ -347,10 +357,7 @@ namespace MinimalFirewall
             var result = deleteAction(items);
             if (!result.Succeeded)
             {
-                activityLogger.LogDebug(
-                    string.IsNullOrWhiteSpace(result.Error)
-                        ? $"Delete{logPrefix.Replace(" ", "")}s failed for {string.Join(",", items)}."
-                        : $"Delete{logPrefix.Replace(" ", "")}s failed for {string.Join(",", items)}. {result.Error}");
+                LogLifecycleFailure(result, $"Delete{logPrefix.Replace(" ", "")}s failed for {string.Join(",", items)}.");
                 return;
             }
 
@@ -380,10 +387,7 @@ namespace MinimalFirewall
             var result = _ruleLifecycleBackend.DeleteByDescription(descriptionTag);
             if (!result.Succeeded)
             {
-                activityLogger.LogDebug(
-                    string.IsNullOrWhiteSpace(result.Error)
-                        ? $"DeleteRulesForWildcard failed for {wildcard.FolderPath}."
-                        : $"DeleteRulesForWildcard failed for {wildcard.FolderPath}. {result.Error}");
+                LogLifecycleFailure(result, $"DeleteRulesForWildcard failed for {wildcard.FolderPath}.");
                 return;
             }
 
@@ -771,10 +775,7 @@ namespace MinimalFirewall
                     var result = _ruleLifecycleBackend.DeleteByName([ruleName]);
                     if (!result.Succeeded)
                     {
-                        activityLogger.LogDebug(
-                            string.IsNullOrWhiteSpace(result.Error)
-                                ? $"Deleting temporary rule {ruleName} failed."
-                                : $"Deleting temporary rule {ruleName} failed. {result.Error}");
+                        LogLifecycleFailure(result, $"Deleting temporary rule {ruleName} failed.");
                         return;
                     }
 
@@ -840,10 +841,7 @@ namespace MinimalFirewall
 
                 if (!result.Succeeded)
                 {
-                    activityLogger.LogDebug(
-                        string.IsNullOrWhiteSpace(result.Error)
-                            ? $"Foreign Rule {logAction} failed for '{ruleName}'."
-                            : $"Foreign Rule {logAction} failed for '{ruleName}'. {result.Error}");
+                    LogLifecycleFailure(result, $"Foreign Rule {logAction} failed for '{ruleName}'.");
                     return;
                 }
 
@@ -1299,10 +1297,7 @@ namespace MinimalFirewall
                 var result = _ruleLifecycleBackend.DeleteByGroup(groupName);
                 if (!result.Succeeded)
                 {
-                    activityLogger.LogDebug(
-                        string.IsNullOrWhiteSpace(result.Error)
-                            ? $"DeleteGroupAsync failed for {groupName}."
-                            : $"DeleteGroupAsync failed for {groupName}. {result.Error}");
+                    LogLifecycleFailure(result, $"DeleteGroupAsync failed for {groupName}.");
                 }
             });
         }
@@ -1312,10 +1307,7 @@ namespace MinimalFirewall
             var result = _ruleLifecycleBackend.DeleteAllMfwRules();
             if (!result.Succeeded)
             {
-                activityLogger.LogDebug(
-                    string.IsNullOrWhiteSpace(result.Error)
-                        ? "DeleteAllMfwRules failed."
-                        : $"DeleteAllMfwRules failed. {result.Error}");
+                LogLifecycleFailure(result, "DeleteAllMfwRules failed.");
                 return;
             }
 

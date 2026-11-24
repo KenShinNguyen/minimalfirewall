@@ -72,7 +72,7 @@ namespace MinimalFirewall
             }
         }
 
-        public void LogDebug(string message)
+        public virtual void LogDebug(string message)
         {
             if (!IsEnabled)
             {
@@ -85,7 +85,7 @@ namespace MinimalFirewall
             WriteToDebugFile(logEntry);
         }
 
-        public void LogException(string context, Exception ex)
+        public virtual void LogException(string context, Exception ex)
         {
             if (!IsEnabled)
             {
