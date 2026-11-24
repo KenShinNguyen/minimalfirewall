@@ -34,7 +34,7 @@ public sealed class SignatureValidationServiceTests
                 verifier,
                 _ => new PublisherSignerIdentity(
                     "Contoso, Inc.",
-                    "CN=Contoso, Inc., O=Contoso Ltd., C=US",
+                    "CN=Contoso\\, Inc., O=Contoso Ltd., C=US",
                     "ABC"));
 
             bool trusted = core.IsSignatureTrusted(
