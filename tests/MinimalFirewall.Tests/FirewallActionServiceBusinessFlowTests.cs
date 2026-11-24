@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using MinimalFirewall.Tests.Fakes;
+using MinimalFirewall.TypedObjects;
 using Xunit;
 
 namespace MinimalFirewall.Tests;
