@@ -41,7 +41,6 @@ public sealed class WindowsFirewallRuleGroupBackend : IFirewallRuleGroupBackend
                         continue;
                     }
 
-                    bool keepRule = false;
                     try
                     {
                         string grouping = rule.Grouping;
@@ -51,7 +50,6 @@ public sealed class WindowsFirewallRuleGroupBackend : IFirewallRuleGroupBackend
                             continue;
                         }
 
-                        keepRule = true;
                         if (!groups.TryGetValue(grouping, out var accumulator))
                         {
                             accumulator = new GroupAccumulator();
@@ -73,7 +71,6 @@ public sealed class WindowsFirewallRuleGroupBackend : IFirewallRuleGroupBackend
                         ReleaseQuietly(rule);
                     }
 
-                    _ = keepRule;
                 }
 
                 var snapshots = new List<FirewallRuleGroupSnapshot>(groups.Count);
