@@ -153,11 +153,15 @@ namespace MinimalFirewall
                     return;
                 }
 
-                PublisherSignerIdentity? signerIdentity = null;
-                bool hasInfo = await Task.Run(() =>
-                    SignatureValidationService.TryGetTrustedSignerIdentity(PendingConnection.AppPath, out signerIdentity));
+                PublisherSignerIdentity? signerIdentity = await Task.Run(() =>
+                {
+                    SignatureValidationService.TryGetTrustedSignerIdentity(
+                        PendingConnection.AppPath,
+                        out PublisherSignerIdentity? identity);
+                    return identity;
+                });
 
-                if (hasInfo && signerIdentity != null)
+                if (signerIdentity != null)
                 {
                     string publisherName = signerIdentity.DisplayName;
                     if (publisherName.Length > 30)
