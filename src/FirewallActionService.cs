@@ -785,6 +785,10 @@ namespace MinimalFirewall
                     }
                     activityLogger.LogDebug($"Temporary rule {ruleName} expired and was removed.");
                 }
+                catch (Exception ex)
+                {
+                    activityLogger.LogException($"Deleting temporary rule {ruleName}", ex);
+                }
             }, null, duration, Timeout.InfiniteTimeSpan);
             _temporaryRuleTimers[ruleName] = timer;
         }
