@@ -67,7 +67,7 @@ public sealed class FirewallActionsServiceBehaviorTests
         Assert.All(
             backend.Rules.Where(rule => rule.Grouping == targetGroup),
             rule => Assert.False(rule.IsEnabled));
-        Assert.True(Assert.Single(backend.Rules.Where(rule => rule.Name == "Other Rule")).IsEnabled);
+        Assert.True(Assert.Single(backend.Rules, rule => rule.Name == "Other Rule").IsEnabled);
     }
 
     [Fact]
