@@ -73,7 +73,7 @@ public sealed class SafeAsyncRunnerTests
 
         SafeAsyncRunner.RunBackground(
             () => { Interlocked.Increment(ref executions); return Task.CompletedTask; },
-            logger, "Test", "Background", ref inFlight);
+            logger, "Test", "Background", gate);
 
         await Task.Delay(50);
         Assert.Equal(2, executions);
