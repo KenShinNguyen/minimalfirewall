@@ -8,8 +8,20 @@ namespace MinimalFirewall;
 public class ExportContainer
 {
     public DateTime ExportDate { get; set; }
-    public List<AdvancedRuleViewModel> AdvancedRules { get; set; } = [];
-    public List<WildcardRule> WildcardRules { get; set; } = [];
+
+    private List<AdvancedRuleViewModel> _advancedRules = [];
+    public List<AdvancedRuleViewModel> AdvancedRules
+    {
+        get => _advancedRules;
+        set => _advancedRules = value ?? [];
+    }
+
+    private List<WildcardRule> _wildcardRules = [];
+    public List<WildcardRule> WildcardRules
+    {
+        get => _wildcardRules;
+        set => _wildcardRules = value ?? [];
+    }
 }
 
 public enum SearchMode { Name, Path }
@@ -287,7 +299,7 @@ public class FirewallTask
         Description = description;
     }
 
-    // Generic helper to avoid manual casting in Logic/UI layers
+    // Generic helper to avoid manual casting to Logic/UI layers
     public T? GetPayload<T>() where T : class
     {
         return Payload as T;
