@@ -13,8 +13,14 @@ namespace MinimalFirewall
         private readonly object _fileLock = new object();
 
         public TemporaryRuleManager()
+            : this(ConfigPathManager.GetConfigPath("temporary_rules.json"))
         {
-            _storagePath = ConfigPathManager.GetConfigPath("temporary_rules.json");
+        }
+
+        internal TemporaryRuleManager(string storagePath)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(storagePath);
+            _storagePath = storagePath;
             _temporaryRules = Load();
         }
 
@@ -45,7 +51,6 @@ namespace MinimalFirewall
             {
                 try
                 {
-                    // Ensure the directory exists before writing
                     string? dir = Path.GetDirectoryName(_storagePath);
                     if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                     {
@@ -54,8 +59,6 @@ namespace MinimalFirewall
 
                     var rulesToSave = new Dictionary<string, DateTime>(_temporaryRules, StringComparer.OrdinalIgnoreCase);
                     string json = JsonSerializer.Serialize(rulesToSave, TempRuleJsonContext.Default.DictionaryStringDateTime);
-                    // A torn write here would make the app forget which rules are temporary,
-                    // leaving expired Allow rules in the firewall forever.
                     string tempPath = _storagePath + ".tmp";
                     File.WriteAllText(tempPath, json);
                     File.Move(tempPath, _storagePath, overwrite: true);
