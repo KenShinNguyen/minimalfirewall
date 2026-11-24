@@ -1,4 +1,3 @@
-using NetFwTypeLib;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -24,11 +23,11 @@ namespace MinimalFirewall
     /// </summary>
     public sealed class ProfileActionResult
     {
-        public NET_FW_PROFILE_TYPE2_ Profile { get; init; }
+        public int Profile { get; init; }
         public bool Succeeded { get; init; }
 
         /// <summary>Action the profile held before the change, when it could be read.</summary>
-        public NET_FW_ACTION_? PreviousAction { get; init; }
+        public FirewallOutboundAction? PreviousAction { get; init; }
 
         /// <summary>Populated only when <see cref="Succeeded"/> is false.</summary>
         public string? Error { get; init; }
@@ -37,12 +36,12 @@ namespace MinimalFirewall
     }
 
     /// <summary>
-    /// Outcome of <see cref="FirewallRuleService.SetDefaultOutboundAction"/> across all three
+    /// Outcome of applying the default outbound action across all three
     /// profiles. A partial application is reported as a failure, not as success.
     /// </summary>
     public sealed class SetDefaultOutboundActionResult
     {
-        public NET_FW_ACTION_ RequestedAction { get; init; }
+        public FirewallOutboundAction RequestedAction { get; init; }
         public IReadOnlyList<ProfileActionResult> Profiles { get; init; } = [];
 
         /// <summary>True when the firewall policy object itself could not be obtained.</summary>
@@ -91,11 +90,11 @@ namespace MinimalFirewall
 
     internal static class FirewallPolicyNames
     {
-        public static string Describe(NET_FW_PROFILE_TYPE2_ profile) => profile switch
+        public static string Describe(int profile) => profile switch
         {
-            NET_FW_PROFILE_TYPE2_.NET_FW_PROFILE2_DOMAIN => "Domain",
-            NET_FW_PROFILE_TYPE2_.NET_FW_PROFILE2_PRIVATE => "Private",
-            NET_FW_PROFILE_TYPE2_.NET_FW_PROFILE2_PUBLIC => "Public",
+            1 => "Domain",
+            2 => "Private",
+            4 => "Public",
             _ => profile.ToString()
         };
     }

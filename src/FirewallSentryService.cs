@@ -111,7 +111,7 @@ namespace MinimalFirewall
                 using var targetInstance = (ManagementBaseObject)newEvent["TargetInstance"];
 
                 // InstanceID is an internal identifier (typically a GUID) that does not
-                // match the display name INetFwRules.Item() resolves — rules added via
+                // match the display name resolved by the firewall rules collection — rules added via
                 // wf.msc or PowerShell would silently fail the later COM lookup.
                 string ruleName = targetInstance["DisplayName"]?.ToString() ?? string.Empty;
                 if (string.IsNullOrEmpty(ruleName))

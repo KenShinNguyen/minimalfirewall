@@ -27,7 +27,7 @@ public enum FirewallRuleCreationProfile
 
 /// <summary>
 /// Pure C# rule definition used at the rule-creation boundary.
-/// This type intentionally contains no NetFwTypeLib COM types.
+/// This type intentionally contains no Windows firewall COM types.
 /// </summary>
 public sealed record FirewallRuleCreationDefinition(
     string Name,

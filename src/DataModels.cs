@@ -1,6 +1,5 @@
 using System.IO;
 using System.ComponentModel;
-using NetFwTypeLib;
 using System.Text.Json.Serialization;
 using MinimalFirewall.TypedObjects;
 
@@ -143,8 +142,8 @@ public class FirewallRuleHashModel
     public string? RemotePorts { get; set; }
     public string? LocalAddresses { get; set; }
     public string? RemoteAddresses { get; set; }
-    public NET_FW_RULE_DIRECTION_ Direction { get; set; }
-    public NET_FW_ACTION_ Action { get; set; }
+    public int Direction { get; set; }
+    public int Action { get; set; }
     public bool Enabled { get; set; }
 }
 

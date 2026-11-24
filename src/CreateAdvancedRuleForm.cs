@@ -1,7 +1,6 @@
 using DarkModeForms;
 using MinimalFirewall.TypedObjects;
 using System.ComponentModel;
-using NetFwTypeLib;
 using MinimalFirewall.Groups;
 using System.Text.RegularExpressions;
 using System.Net;
