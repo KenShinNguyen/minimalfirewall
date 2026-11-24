@@ -82,7 +82,7 @@ public sealed class FirewallActionsServiceBehaviorTests
             IsEnabled = true,
             Direction = Directions.Outgoing,
             Protocol = 256,
-            ApplicationName = "*",
+            ApplicationName = string.Empty,
             ServiceName = string.Empty,
             LocalPorts = "*",
             RemotePorts = "*",
