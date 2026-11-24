@@ -432,12 +432,7 @@ namespace MinimalFirewall
                 SystemFirewallRuleProtocol.Tcp,
                 "80,443", // Remote
                 "*",      // Local
-                enable))
-            {
-                return false;
-            }
-
-            return true;
+                enable);
         }
 
         private bool ManageDhcpClientRule(bool enable)
@@ -450,8 +445,7 @@ namespace MinimalFirewall
                 SystemFirewallRuleProtocol.Udp,
                 "67",  // Remote
                 "68",  // Local
-                enable
-            );
+                enable);
         }
 
         // Thread-safe wrapper for MessageBox
@@ -616,14 +610,14 @@ namespace MinimalFirewall
 
         private bool ManageWslRules(bool enable)
         {
-            // SharedAccess (ICS) 
+            // SharedAccess (ICS)
             if (!ManageSystemRule(
                 "Minimal Firewall System - WSL Relay (ICS)",
                 "Allows Internet Connection Sharing for WSL2/Hyper-V.",
                 "svchost.exe",
                 "SharedAccess",
                 SystemFirewallRuleProtocol.Any,
-                "*", "*", 
+                "*", "*",
                 enable))
             {
                 return false;
@@ -634,8 +628,8 @@ namespace MinimalFirewall
                 "Minimal Firewall System - Kernel/Hyper-V",
                 "Allows the System process (PID 4) for WSL2 vSwitch traffic.",
                 "System",
-                "", // No Service
-                256, 
+                "",
+                SystemFirewallRuleProtocol.Any,
                 "*", "*",
                 enable))
             {
@@ -649,7 +643,7 @@ namespace MinimalFirewall
                 "svchost.exe",
                 "Dnscache",
                 SystemFirewallRuleProtocol.Udp,
-                "53", "*", 
+                "53", "*",
                 enable))
             {
                 return false;
@@ -663,8 +657,12 @@ namespace MinimalFirewall
                 "Dnscache",
                 SystemFirewallRuleProtocol.Tcp,
                 "53,443,853", "*",
-                enable
-            );
+                enable))
+            {
+                return false;
+            }
+
+            return true;
         }
 
         public void ProcessPendingConnection(PendingConnectionViewModel pending, string decision, TimeSpan duration = default, bool trustPublisher = false)
