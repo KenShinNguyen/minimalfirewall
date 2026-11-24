@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $coverageFiles = @(
-    Get-ChildItem -LiteralPath "TestResults" -Filter "coverage.cobertura.xml" -File -Recurse -ErrorAction SilentlyContinue
+    Get-ChildItem -LiteralPath "TestResults" -Filter "*.cobertura.xml" -File -Recurse -ErrorAction SilentlyContinue
 )
 
 if ($coverageFiles.Count -ne 1) {
