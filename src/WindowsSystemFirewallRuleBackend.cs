@@ -34,7 +34,7 @@ public sealed class WindowsSystemFirewallRuleBackend : ISystemFirewallRuleBacken
             rule.Direction = SystemFirewallRuleMapper.ToComDirection(definition.Direction);
             rule.Action = SystemFirewallRuleMapper.ToComAction(definition.Action);
             rule.Grouping = MFWConstants.MainRuleGroup;
-            rule.Enabled = definition.Enabled;
+            rule.Enabled = SystemFirewallRuleMapper.ToComEnabled(definition.Enabled);
             rule.InterfaceTypes = "All";
             rule.Protocol = SystemFirewallRuleMapper.ToComProtocol(definition.Protocol);
 
@@ -112,5 +112,12 @@ internal static class SystemFirewallRuleMapper
             SystemFirewallRuleProtocol.Tcp => 6,
             SystemFirewallRuleProtocol.Udp => 17,
             _ => throw new ArgumentOutOfRangeException(nameof(protocol), protocol, "Unsupported system rule protocol.")
+        };
+
+    public static bool ToComEnabled(bool enabled)
+        => enabled switch
+        {
+            true => true,
+            false => false
         };
 }
