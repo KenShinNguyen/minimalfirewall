@@ -527,15 +527,20 @@ namespace MinimalFirewall
                 }
             }
 
-            foreach (var ruleName in rulesToRemove)
+            if (rulesToRemove.Count == 0)
             {
-                try
+                return rulesToRemove;
+            }
+
+            INetFwPolicy2 deletePolicy = GetLocalPolicy();
+            INetFwRules? deleteRules = null;
+            try
+            {
+                deleteRules = deletePolicy.Rules;
+                foreach (var ruleName in rulesToRemove)
                 {
-                    INetFwPolicy2 deletePolicy = GetLocalPolicy();
-                    INetFwRules? deleteRules = null;
                     try
                     {
-                        deleteRules = deletePolicy.Rules;
                         deleteRules.Remove(ruleName);
                     }
                     catch (FileNotFoundException)
@@ -546,19 +551,18 @@ namespace MinimalFirewall
                     {
                         Debug.WriteLine($"[ERROR] ExecuteDeleteAndReturnNames ('{ruleName}'): Failed. HResult: 0x{ex.HResult:X8}. Message: {ex.Message}");
                     }
-                    finally
-                    {
-                        if (deleteRules != null)
-                        {
-                            Marshal.ReleaseComObject(deleteRules);
-                        }
-
-                        Marshal.ReleaseComObject(deletePolicy);
-                    }
                 }
-                catch (Exception ex)
+            }
+            finally
+            {
+                if (deleteRules != null)
                 {
-                    Debug.WriteLine($"[ERROR] ExecuteDeleteAndReturnNames ('{ruleName}'): Unexpected error during removal. Type: {ex.GetType().Name}. Message: {ex.Message}");
+                    Marshal.ReleaseComObject(deleteRules);
+                }
+
+                if (deletePolicy != null)
+                {
+                    Marshal.ReleaseComObject(deletePolicy);
                 }
             }
 
