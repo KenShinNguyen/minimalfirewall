@@ -15,9 +15,9 @@
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<AssemblyVersion>2.8.5.0</AssemblyVersion>
 		<FileVersion>2.8.5.0</FileVersion>
-		<Company>Deminimis</Company>
+		<Company>KenShinNguyen</Company>
 		<Product>Minimal Firewall</Product>
-		<PackageProjectUrl>https://github.com/deminimis/minimalfirewall</PackageProjectUrl>
+		<PackageProjectUrl>https://github.com/KenShinNguyen/minimalfirewall</PackageProjectUrl>
 		<PackageTags>firewall, security, privacy</PackageTags>
 		<StartupObject>MinimalFirewall.Program</StartupObject>
 		<Configurations>Debug;Release</Configurations>
