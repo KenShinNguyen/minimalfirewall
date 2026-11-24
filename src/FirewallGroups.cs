@@ -1,9 +1,7 @@
-using NetFwTypeLib;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
-using System.Runtime.InteropServices;
 
 namespace MinimalFirewall.Groups
 {
@@ -12,48 +10,36 @@ namespace MinimalFirewall.Groups
         public string Name { get; }
         public int RuleCount { get; }
 
-        // Store the actual COM objects so we can modify them later
-        private readonly List<INetFwRule2> _rules;
         private bool _isEnabled;
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
-        public FirewallGroup(string name, List<INetFwRule2> groupRules)
+        public FirewallGroup(string name, int ruleCount, bool isEnabled)
         {
             Name = name;
-            // Transfer ownership of the list to this class
-            _rules = groupRules;
-            RuleCount = _rules.Count;
-
-            _isEnabled = _rules.Count > 0 && _rules.All(r => r.Enabled);
+            RuleCount = ruleCount;
+            _isEnabled = isEnabled;
         }
 
         public bool IsEnabled
         {
             get => _isEnabled;
-            set
+            private set
             {
-                if (_isEnabled != value)
+                if (_isEnabled == value)
                 {
-                    try
-                    {
-                        foreach (var rule in _rules)
-                        {
-                            rule.Enabled = value;
-                        }
-
-                        _isEnabled = value;
-                        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsEnabled)));
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"Failed to toggle rules: {ex.Message}");
-                        throw;
-                    }
+                    return;
                 }
+
+                _isEnabled = value;
+                PropertyChanged?.Invoke(
+                    this,
+                    new PropertyChangedEventArgs(nameof(IsEnabled)));
             }
         }
 
+        // The background task owns persistence of the firewall state. This model only
+        // updates its snapshot after the UI has queued the state-change operation.
         public void SetEnabledState(bool isEnabled)
         {
             IsEnabled = isEnabled;
@@ -62,75 +48,37 @@ namespace MinimalFirewall.Groups
 
     public class FirewallGroupManager
     {
-        public FirewallGroupManager() { }
+        private readonly IFirewallRuleGroupBackend _backend;
 
-        private INetFwPolicy2 GetFirewallPolicy()
+        public FirewallGroupManager(IFirewallRuleGroupBackend? backend = null)
         {
-            try
-            {
-                var policyType = Type.GetTypeFromProgID("HNetCfg.FwPolicy2");
-                if (policyType == null)
-                {
-                    throw new InvalidOperationException("Firewall policy type could not be retrieved.");
-                }
-                return (INetFwPolicy2)Activator.CreateInstance(policyType)!;
-            }
-            catch (COMException ex)
-            {
-                throw new InvalidOperationException("Failed to create firewall policy instance.", ex);
-            }
+            _backend = backend ?? new WindowsFirewallRuleGroupBackend();
         }
 
         public List<FirewallGroup> GetAllGroups()
         {
-            var groupsData = new Dictionary<string, List<INetFwRule2>>(StringComparer.OrdinalIgnoreCase);
-            INetFwPolicy2? policy = null;
-            INetFwRules? comRules = null;
-
-            try
+            var result = _backend.GetGroups();
+            if (!result.Succeeded || result.Value is null)
             {
-                policy = GetFirewallPolicy();
-                comRules = policy.Rules;
-
-                foreach (INetFwRule2 rule in comRules)
-                {
-                    string grouping = rule.Grouping;
-
-                    if (!string.IsNullOrEmpty(grouping) && grouping.EndsWith(MFWConstants.MfwRuleSuffix))
-                    {
-                        if (!groupsData.TryGetValue(grouping, out var ruleList))
-                        {
-                            ruleList = [];
-                            groupsData[grouping] = ruleList;
-                        }
-                        ruleList.Add(rule);
-                    }
-                    else
-                    {
-                        Marshal.ReleaseComObject(rule);
-                    }
-                }
-
-                var list = new List<FirewallGroup>(groupsData.Count);
-                foreach (var groupKey in groupsData.Keys.OrderBy(k => k))
-                {
-                    list.Add(new FirewallGroup(groupKey, groupsData[groupKey]));
-                }
-
-                return list;
+                throw new InvalidOperationException(
+                    string.IsNullOrWhiteSpace(result.Error)
+                        ? "Failed to load firewall rule groups."
+                        : result.Error,
+                    result.Exception);
             }
-            finally
-            {
-                if (comRules != null)
-                {
-                    Marshal.ReleaseComObject(comRules);
-                }
 
-                if (policy != null)
-                {
-                    Marshal.ReleaseComObject(policy);
-                }
-            }
+            return result.Value
+                .OrderBy(group => group.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(group => new FirewallGroup(
+                    group.Name,
+                    group.RuleCount,
+                    group.IsEnabled))
+                .ToList();
         }
+
+        public FirewallRuleGroupResult<int> SetGroupEnabledState(
+            string groupName,
+            bool isEnabled) =>
+            _backend.SetGroupEnabled(groupName, isEnabled);
     }
 }
