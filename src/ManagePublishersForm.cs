@@ -72,7 +72,7 @@ namespace MinimalFirewall
                 if (result == DialogResult.Yes)
                 {
                     // Cast selected items to a list to avoid modifying the collection while iterating
-                    var selectedItems = publishersListBox.SelectedItems.Cast<string>().ToList();
+                    var selectedItems = publishersListBox.SelectedItems.Cast<PublisherWhitelistEntry>().ToList();
 
                     foreach (var publisher in selectedItems)
                     {
