@@ -6,6 +6,8 @@ on:
 
 jobs:
   update:
+    # This workflow targets the upstream WinGet package. Never run it from a fork.
+    if: github.repository == 'deminimis/minimalfirewall'
     name: Update Package
     runs-on: ubuntu-latest
     steps:
