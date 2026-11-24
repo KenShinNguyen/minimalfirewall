@@ -4,6 +4,17 @@ using System.Threading.Tasks;
 
 namespace MinimalFirewall;
 
+public sealed class AsyncRunGate
+{
+    private int _inFlight;
+
+    public bool TryEnter() => Interlocked.Exchange(ref _inFlight, 1) == 0;
+
+    public void Exit() => Volatile.Write(ref _inFlight, 0);
+
+    public bool IsInFlight => Volatile.Read(ref _inFlight) == 1;
+}
+
 public static class SafeAsyncRunner
 {
     public static string CreateErrorId() => $"ERR-{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}";
@@ -30,9 +41,11 @@ public static class SafeAsyncRunner
         }
     }
 
-    public static async void RunBackground(Func<Task> operation, IAppLogger logger, string category, string operationName, ref int inFlightFlag)
+    public static async void RunBackground(Func<Task> operation, IAppLogger logger, string category, string operationName, AsyncRunGate gate)
     {
-        if (Interlocked.Exchange(ref inFlightFlag, 1) == 1)
+        ArgumentNullException.ThrowIfNull(gate);
+
+        if (!gate.TryEnter())
         {
             logger.Debug(category, $"{operationName} skipped because a previous execution is still running.");
             return;
@@ -53,7 +66,7 @@ public static class SafeAsyncRunner
         }
         finally
         {
-            Volatile.Write(ref inFlightFlag, 0);
+            gate.Exit();
         }
     }
 }
