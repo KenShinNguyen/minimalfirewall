@@ -113,7 +113,9 @@ namespace MinimalFirewall
 
         private void GroupsDataGridView_CellClick(object sender, DataGridViewCellEventArgs e)
         {
-            if (e.RowIndex >= 0 && groupsDataGridView.Columns["groupEnabledColumn"] != null && e.ColumnIndex == groupsDataGridView.Columns["groupEnabledColumn"].Index)
+            if (e.RowIndex >= 0 &&
+                groupsDataGridView.Columns["groupEnabledColumn"] is { } enabledColumn &&
+                e.ColumnIndex == enabledColumn.Index)
             {
                 if (groupsDataGridView.Rows[e.RowIndex].DataBoundItem is FirewallGroup group && _backgroundTaskService != null)
                 {
@@ -130,7 +132,9 @@ namespace MinimalFirewall
 
         private void GroupsDataGridView_CellPainting(object sender, DataGridViewCellPaintingEventArgs e)
         {
-            if (e.RowIndex >= 0 && groupsDataGridView.Columns["groupEnabledColumn"] != null && e.ColumnIndex == groupsDataGridView.Columns["groupEnabledColumn"].Index)
+            if (e.RowIndex >= 0 &&
+                groupsDataGridView.Columns["groupEnabledColumn"] is { } enabledColumn &&
+                e.ColumnIndex == enabledColumn.Index)
             {
                 e.PaintBackground(e.CellBounds, true);
                 if (groupsDataGridView.Rows[e.RowIndex].DataBoundItem is FirewallGroup group && e.Graphics != null)
