@@ -480,6 +480,91 @@ namespace MinimalFirewall
             }
         }
 
+        private static List<string> ExecuteDeleteAndReturnNames(Func<INetFwRule2, bool> predicate)
+        {
+            var rulesToRemove = new List<string>();
+            INetFwPolicy2 firewallPolicy = GetLocalPolicy();
+            if (firewallPolicy?.Rules == null)
+            {
+                return rulesToRemove;
+            }
+
+            var comRules = firewallPolicy.Rules;
+            try
+            {
+                foreach (INetFwRule2 rule in comRules)
+                {
+                    try
+                    {
+                        if (rule != null && predicate(rule))
+                        {
+                            rulesToRemove.Add(rule.Name);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[WARN] ExecuteDeleteAndReturnNames: Error checking firewall rule: {ex.Message}");
+                    }
+                    finally
+                    {
+                        if (rule != null)
+                        {
+                            Marshal.ReleaseComObject(rule);
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                if (comRules != null)
+                {
+                    Marshal.ReleaseComObject(comRules);
+                }
+
+                if (firewallPolicy != null)
+                {
+                    Marshal.ReleaseComObject(firewallPolicy);
+                }
+            }
+
+            foreach (var ruleName in rulesToRemove)
+            {
+                try
+                {
+                    INetFwPolicy2 deletePolicy = GetLocalPolicy();
+                    INetFwRules? deleteRules = null;
+                    try
+                    {
+                        deleteRules = deletePolicy.Rules;
+                        deleteRules.Remove(ruleName);
+                    }
+                    catch (FileNotFoundException)
+                    {
+                        Debug.WriteLine($"[WARN] ExecuteDeleteAndReturnNames: Rule '{ruleName}' not found for removal.");
+                    }
+                    catch (COMException ex)
+                    {
+                        Debug.WriteLine($"[ERROR] ExecuteDeleteAndReturnNames ('{ruleName}'): Failed. HResult: 0x{ex.HResult:X8}. Message: {ex.Message}");
+                    }
+                    finally
+                    {
+                        if (deleteRules != null)
+                        {
+                            Marshal.ReleaseComObject(deleteRules);
+                        }
+
+                        Marshal.ReleaseComObject(deletePolicy);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[ERROR] ExecuteDeleteAndReturnNames ('{ruleName}'): Unexpected error during removal. Type: {ex.GetType().Name}. Message: {ex.Message}");
+                }
+            }
+
+            return rulesToRemove;
+        }
+
                         public static List<string> DeleteRulesByServiceName(string serviceName)
         {
             if (string.IsNullOrEmpty(serviceName))
