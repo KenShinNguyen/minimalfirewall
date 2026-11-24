@@ -28,7 +28,6 @@ namespace MinimalFirewall
         private FirewallActionsService _actionsService = null!;
         private FirewallEventListenerService _eventListenerService = null!;
         private FirewallSentryService _firewallSentryService = null!;
-        private FirewallRuleService _firewallRuleService = null!;
         private UserActivityLogger _activityLogger = null!;
         private WildcardRuleService _wildcardRuleService = null!;
         private RuleTimestampService _ruleTimestampService = null!;
@@ -130,7 +129,6 @@ namespace MinimalFirewall
             _groupManager = new FirewallGroupManager();
             _iconService = new IconService { ImageList = appIconList };
             _whitelistService = new PublisherWhitelistService();
-            _firewallRuleService = new FirewallRuleService();
             _activityLogger = new UserActivityLogger { IsEnabled = _appSettings.IsLoggingEnabled };
             _wildcardRuleService = new WildcardRuleService();
             _ruleTimestampService = new RuleTimestampService();
@@ -144,6 +142,7 @@ namespace MinimalFirewall
                 ruleQueryBackend);
             _firewallSentryService = new FirewallSentryService();
             var trafficMonitorViewModel = new TrafficMonitorViewModel();
+            var ruleUpdateBackend = new WindowsFirewallRuleUpdateBackend();
 
             // Fail closed on an unreadable policy: if the lockdown state cannot be determined we
             // keep reporting blocked connections rather than silently going quiet, which is what
@@ -158,7 +157,7 @@ namespace MinimalFirewall
             _actionsService.BackgroundTaskService = _backgroundTaskService;
             _eventListenerService.BackgroundTaskService = _backgroundTaskService;
 
-            _mainViewModel = new MainViewModel(_firewallRuleService, _wildcardRuleService, _backgroundTaskService, _dataService, _firewallSentryService, trafficMonitorViewModel, _eventListenerService, _appSettings, _activityLogger, _actionsService);
+            _mainViewModel = new MainViewModel(ruleUpdateBackend, _wildcardRuleService, _backgroundTaskService, _dataService, _firewallSentryService, trafficMonitorViewModel, _eventListenerService, _appSettings, _activityLogger, _actionsService);
 
             // Initialize UI Controls with Services
             dashboardControl1.Initialize(_mainViewModel, _appSettings, _iconService, _wildcardRuleService, _actionsService, _backgroundTaskService);
