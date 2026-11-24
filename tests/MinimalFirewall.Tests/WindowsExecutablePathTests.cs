@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.IO;
 using Xunit;
 
 namespace MinimalFirewall.Tests;
@@ -26,8 +28,8 @@ public sealed class WindowsExecutablePathTests
     }
 
     [Theory]
-    [InlineData(@"..\\powershell.exe")]
-    [InlineData(@"C:\\Windows\\System32\\powershell.exe")]
+    [InlineData(@"..\powershell.exe")]
+    [InlineData(@"C:\Windows\System32\powershell.exe")]
     [InlineData("powershell.txt")]
     [InlineData("..")]
     public void GetWindowsSystemExecutablePath_RejectsPathsAndNonExecutables(string executableName)
@@ -39,7 +41,7 @@ public sealed class WindowsExecutablePathTests
     [Fact]
     public void CreateExplorerSelectStartInfo_UsesAbsoluteExplorerPathAndArgumentList()
     {
-        const string targetPath = @"C:\\Program Files\\Example App\\Example.exe";
+        const string targetPath = @"C:\Program Files\Example App\Example.exe";
 
         ProcessStartInfo startInfo = ProcessHelper.CreateExplorerSelectStartInfo(targetPath);
 
@@ -54,7 +56,7 @@ public sealed class WindowsExecutablePathTests
     [Fact]
     public void CreateExplorerSelectStartInfo_RemovesLegacySurroundingQuotes()
     {
-        const string targetPath = @"C:\\Program Files\\Example App\\Example.exe";
+        const string targetPath = @"C:\Program Files\Example App\Example.exe";
 
         ProcessStartInfo startInfo = ProcessHelper.CreateExplorerSelectStartInfo($"\"{targetPath}\"");
 
