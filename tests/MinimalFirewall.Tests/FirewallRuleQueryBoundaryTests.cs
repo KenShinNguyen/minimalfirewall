@@ -39,7 +39,7 @@ public sealed class FirewallRuleQueryBoundaryTests
     {
         var snapshot = new FirewallRuleSnapshot(
             "Demo Rule",
-            "[MFW-AutoAllow-Publisher:Contoso] hidden",
+            "MFW_AutoAllow_Publisher:[Contoso] hidden",
             true,
             1,
             true,
