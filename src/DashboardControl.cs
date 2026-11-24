@@ -445,7 +445,7 @@ namespace MinimalFirewall
 
                 try
                 {
-                    Process.Start("explorer.exe", $"/select, \"{pending.AppPath}\"");
+                    Process.Start(ProcessHelper.CreateExplorerSelectStartInfo(pending.AppPath));
                 }
                 catch (Exception ex) when (ex is Win32Exception or FileNotFoundException)
                 {
