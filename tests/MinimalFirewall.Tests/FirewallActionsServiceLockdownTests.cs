@@ -58,7 +58,6 @@ public sealed class FirewallActionsServiceLockdownTests
     {
         public TestableFirewallActionsService(IFirewallBackend backend)
             : base(
-                null!,
                 new UserActivityLogger(),
                 null!,
                 null!,

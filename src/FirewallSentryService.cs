@@ -27,7 +27,7 @@ namespace MinimalFirewall
             _pendingChanges.Clear();
         }
 
-        public FirewallSentryService(FirewallRuleService firewallService)
+        public FirewallSentryService()
             : this(new WindowsFirewallRuleObservationBackend())
         {
         }

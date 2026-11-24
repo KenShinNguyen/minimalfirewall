@@ -6,7 +6,6 @@ using System.Linq;
 using System.Windows.Forms;
 using System.Threading.Tasks;
 using System.Collections.Concurrent;
-using System.Runtime.InteropServices;
 using System.Diagnostics;
 using System;
 using System.Threading;
@@ -15,7 +14,6 @@ using System.Text.Json;
 namespace MinimalFirewall
 {
     public partial class FirewallActionsService(
-        FirewallRuleService firewallService,
         UserActivityLogger activityLogger,
         FirewallEventListenerService eventListenerService,
         FirewallSentryService sentryService,
