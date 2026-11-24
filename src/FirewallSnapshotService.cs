@@ -13,8 +13,14 @@ namespace MinimalFirewall
         private readonly object _fileLock = new object();
 
         public FirewallSnapshotService()
+            : this(ConfigPathManager.GetConfigPath("known_state.json"))
         {
-            _snapshotPath = ConfigPathManager.GetConfigPath("known_state.json");
+        }
+
+        internal FirewallSnapshotService(string snapshotPath)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(snapshotPath);
+            _snapshotPath = snapshotPath;
         }
 
         public HashSet<string> LoadSnapshot()
@@ -26,9 +32,13 @@ namespace MinimalFirewall
                     if (File.Exists(_snapshotPath))
                     {
                         using var stream = new FileStream(_snapshotPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                        var loaded = JsonSerializer.Deserialize(stream, SnapshotContext.Default.HashSetString);
 
-                        return JsonSerializer.Deserialize(stream, SnapshotContext.Default.HashSetString)
-                               ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        // HashSet's comparer is not persisted by JSON serialization.
+                        // Reapply the case-insensitive rule-name contract after every load.
+                        return loaded is null
+                            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                            : new HashSet<string>(loaded, StringComparer.OrdinalIgnoreCase);
                     }
                 }
                 catch (Exception ex)
