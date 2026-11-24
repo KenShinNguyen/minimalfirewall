@@ -9,7 +9,6 @@ using System.Windows.Forms;
 using DarkModeForms;
 using Firewall.Traffic.ViewModels;
 using MinimalFirewall.TypedObjects;
-using NetFwTypeLib;
 
 namespace MinimalFirewall
 {
