@@ -1,4 +1,5 @@
 using System;
+using MinimalFirewall.TypedObjects;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using NetFwTypeLib;
