@@ -190,7 +190,7 @@ public static List<string> DeleteRulesByGroup(string groupName)
             return ExecuteDeleteAndReturnNames(rule => string.Equals(rule.Grouping, groupName, StringComparison.OrdinalIgnoreCase));
         }
 
-public static void DeleteAllMfwRules()
+private static void DeleteAllMfwRulesCore()
         {
             var rulesToRemove = GetRuleNamesAndRelease(rule =>
                 !string.IsNullOrEmpty(rule.Grouping) &&
@@ -274,7 +274,7 @@ private static void SetRuleEnabledState(string ruleName, bool isEnabled, string 
         => Execute(() => DeleteRulesByGroup(groupName), "delete rules by group");
 
     public FirewallRuleLifecycleOperationResult DeleteAllMfwRules()
-        => Execute(DeleteAllMfwRules, "delete all Minimal Firewall rules");
+        => Execute(DeleteAllMfwRulesCore, "delete all Minimal Firewall rules");
 
     public FirewallRuleLifecycleOperationResult EnableByName(string ruleName)
         => Execute(() => SetRuleEnabledState(ruleName, true, nameof(EnableByName)), "enable rule");
