@@ -55,7 +55,8 @@ public sealed class WfpAuditPolicyCoordinatorTests
 
         secondCoordinator.EnableWithBaselineTracking();
         Assert.True(secondBackend.Enabled);
-        Assert.Equal(1, secondBackend.SetCalls);
+        // The durable baseline is preserved; the OS is already enabled after the crash, so no redundant mutation is required.
+        Assert.Equal(0, secondBackend.SetCalls);
         Assert.False(store.State!.Subcategories.Single().WasFailureAuditingEnabledBeforeApp);
 
         secondCoordinator.RestoreBaseline();
