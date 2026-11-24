@@ -740,14 +740,19 @@ namespace MinimalFirewall
             activityLogger.LogDebug($"Processing Pending Connection for '{pending.AppPath}'. Decision: {decision}, Duration: {duration}, Trust Publisher: {trustPublisher}");
             var shortSnoozeDuration = TimeSpan.FromSeconds(10);
             var longSnoozeDuration = TimeSpan.FromMinutes(2);
-            if (trustPublisher && SignatureValidationService.IsSignatureTrusted(pending.AppPath, out var publisherName) && !string.IsNullOrEmpty(publisherName))
+            if (trustPublisher &&
+                SignatureValidationService.TryGetPublisherIdentity(pending.AppPath, out var publisherIdentity) &&
+                publisherIdentity != null)
             {
-                _whitelistService.Add(publisherName);
-                activityLogger.LogChange("Publisher Whitelisted", $"Publisher '{publisherName}' was added to the whitelist.");
+                _whitelistService.Add(publisherIdentity);
+                activityLogger.LogChange(
+                    "Publisher Whitelisted",
+                    $"Publisher '{publisherIdentity.DisplayName}' (SHA-256 {publisherIdentity.Sha256Thumbprint}) was added to the whitelist.");
             }
             else if (trustPublisher)
             {
-                activityLogger.LogDebug($"[Warning] Attempted to trust publisher for '{pending.AppPath}', but no publisher information could be extracted.");
+                activityLogger.LogDebug(
+                    $"[Warning] Could not create a certificate-specific publisher trust entry for '{pending.AppPath}'.");
             }
 
             eventListenerService.ClearPendingNotification(pending.AppPath, pending.Direction);
