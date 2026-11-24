@@ -161,12 +161,13 @@ namespace MinimalFirewall
                 if (publisherIdentity != null)
                 {
                     string publisherName = publisherIdentity.DisplayName;
-                    if (publisherName.Length > 30)
+                    if (publisherName.Length > 24)
                     {
-                        publisherName = string.Concat(publisherName.AsSpan(0, 30), "...");
+                        publisherName = string.Concat(publisherName.AsSpan(0, 24), "...");
                     }
 
-                    trustPublisherCheckBox.Text = $"Trust certificate: {publisherName}";
+                    string shortFingerprint = publisherIdentity.Sha256Thumbprint[..12];
+                    trustPublisherCheckBox.Text = $"Trust {publisherName} [{shortFingerprint}]";
                     trustPublisherCheckBox.Visible = true;
                 }
                 else
