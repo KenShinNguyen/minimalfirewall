@@ -1,7 +1,5 @@
 using System.Management;
-using System.Runtime.InteropServices;
 using System.Diagnostics;
-using System.IO;
 using MinimalFirewall.TypedObjects;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,7 +11,7 @@ namespace MinimalFirewall
 {
     public partial class FirewallSentryService : IDisposable
     {
-        private readonly FirewallRuleService firewallService;
+        private readonly IFirewallRuleObservationBackend _observationBackend;
         private ManagementEventWatcher? _watcher;
         private bool _isStarted = false;
 
@@ -30,8 +28,13 @@ namespace MinimalFirewall
         }
 
         public FirewallSentryService(FirewallRuleService firewallService)
+            : this(new WindowsFirewallRuleObservationBackend())
         {
-            this.firewallService = firewallService;
+        }
+
+        public FirewallSentryService(IFirewallRuleObservationBackend observationBackend)
+        {
+            _observationBackend = observationBackend ?? throw new ArgumentNullException(nameof(observationBackend));
         }
 
         public void Start()
@@ -164,44 +167,35 @@ namespace MinimalFirewall
                     continue;
                 }
 
-                // Look up single rule safely (COM throws exceptions if rule is missing/deleted quickly).
-                // The handle owns the COM lifetime, so every path below releases it exactly once.
-                FirewallRuleHandle? ruleHandle = null;
+                // The observation backend owns the firewall COM lookup and lifetime.
+                AdvancedRuleViewModel? ruleVm = null;
                 try
                 {
-                    ruleHandle = FirewallRuleService.GetRuleHandleByName(changeEvent.Name);
+                    ruleVm = _observationBackend.GetRuleByName(changeEvent.Name);
                 }
                 catch (FileNotFoundException)
                 {
-                    // Race condition (WMI report change, COM says doesn't exist)
+                    // Race condition (WMI report change, rule no longer exists)
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[SENTRY ERROR] COM Lookup failed for {changeEvent.Name}: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"[SENTRY ERROR] Rule lookup failed for {changeEvent.Name}: {ex.Message}");
                 }
 
-                if (ruleHandle != null)
+                if (ruleVm != null)
                 {
-                    try
+                    var changeObj = new FirewallRuleChange
                     {
-                        var ruleVm = FirewallDataService.CreateAdvancedRuleViewModel(ruleHandle.Rule);
-                        var changeObj = new FirewallRuleChange
-                        {
-                            Type = changeEvent.Type,
-                            Rule = ruleVm
-                        };
+                        Type = changeEvent.Type,
+                        Rule = ruleVm
+                    };
 
-                        EnrichWithPublisher(changeObj, ruleVm.ApplicationName);
-                        changes.Add(changeObj);
-                    }
-                    finally
-                    {
-                        ruleHandle.Dispose();
-                    }
+                    EnrichWithPublisher(changeObj, ruleVm.ApplicationName);
+                    changes.Add(changeObj);
                 }
                 else if (changeEvent.Type != ChangeType.Deleted)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[SENTRY WARN] Dropped {changeEvent.Type} event for '{changeEvent.Name}': COM rule could not be fetched.");
+                    System.Diagnostics.Debug.WriteLine($"[SENTRY WARN] Dropped {changeEvent.Type} event for '{changeEvent.Name}': rule could not be fetched.");
                 }
             }
 
@@ -212,71 +206,25 @@ namespace MinimalFirewall
         private List<FirewallRuleChange> PerformFullBaselineScan(IProgress<int>? progress, CancellationToken token)
         {
             var changes = new List<FirewallRuleChange>();
-            var policyType = Type.GetTypeFromProgID("HNetCfg.FwPolicy2");
-            if (policyType == null)
-            {
-                return changes;
-            }
 
-            var firewallPolicy = (NetFwTypeLib.INetFwPolicy2?)Activator.CreateInstance(policyType);
-            if (firewallPolicy?.Rules == null)
+            foreach (var ruleVm in _observationBackend.GetForeignRules(progress, token))
             {
-                return changes;
-            }
-
-            var comRules = firewallPolicy.Rules;
-            try
-            {
-                int totalRules = comRules.Count;
-                if (totalRules == 0) { progress?.Report(100); return changes; }
-
-                int processedRules = 0;
-                foreach (NetFwTypeLib.INetFwRule2 rule in comRules)
+                if (token.IsCancellationRequested)
                 {
-                    if (token.IsCancellationRequested)
-                    {
-                        break;
-                    }
-
-                    processedRules++;
-                    progress?.Report((processedRules * 100) / totalRules);
-
-                    if (rule == null)
-                    {
-                        continue;
-                    }
-
-                    try
-                    {
-                        string ruleName = rule.Name;
-                        if (string.IsNullOrEmpty(ruleName) || IsMfwRule(rule.Grouping))
-                        {
-                            continue;
-                        }
-
-                        var ruleVm = FirewallDataService.CreateAdvancedRuleViewModel(rule);
-                        var changeObj = new FirewallRuleChange { Type = ChangeType.New, Rule = ruleVm };
-                        EnrichWithPublisher(changeObj, ruleVm.ApplicationName);
-                        changes.Add(changeObj);
-                    }
-                    finally
-                    {
-                        Marshal.ReleaseComObject(rule);
-                    }
-                }
-            }
-            finally
-            {
-                if (comRules != null)
-                {
-                    Marshal.ReleaseComObject(comRules);
+                    break;
                 }
 
-                if (firewallPolicy != null)
+                var changeObj = new FirewallRuleChange
                 {
-                    Marshal.ReleaseComObject(firewallPolicy);
-                }
+                    Type = ChangeType.New,
+                    Rule = ruleVm
+                };
+
+                EnrichWithPublisher(changeObj, ruleVm.ApplicationName);
+                changes.Add(changeObj);
             }
+
+            progress?.Report(100);
             return changes;
         }
 
@@ -308,19 +256,6 @@ namespace MinimalFirewall
             {
                 /* Ignore invalid paths/perms to prevent scanning interruption */
             }
-        }
-
-        // Changed to accept string directly to avoid passing COM objects
-        private static bool IsMfwRule(string grouping)
-        {
-            if (string.IsNullOrEmpty(grouping))
-            {
-                return false;
-            }
-
-            return grouping.EndsWith(MFWConstants.MfwRuleSuffix) ||
-                   grouping == MFWConstants.MainRuleGroup ||
-                   grouping == MFWConstants.WildcardRuleGroup;
         }
 
         public void Dispose()
