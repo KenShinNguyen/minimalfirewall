@@ -134,7 +134,7 @@ namespace MinimalFirewall
         {
             try
             {
-                return FirewallRuleService.GetDefaultOutboundState().ToString();
+                return new WindowsFirewallBackend().GetDefaultOutboundState().ToString();
             }
             catch (Exception ex)
             {
