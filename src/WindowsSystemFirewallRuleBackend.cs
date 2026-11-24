@@ -6,62 +6,52 @@ namespace MinimalFirewall;
 public sealed class WindowsSystemFirewallRuleBackend : ISystemFirewallRuleBackend
 {
     private readonly IFirewallRuleLifecycleBackend _lifecycleBackend;
+    private readonly IFirewallRuleCreationBackend _creationBackend;
 
-    public WindowsSystemFirewallRuleBackend(IFirewallRuleLifecycleBackend? lifecycleBackend = null)
+    public WindowsSystemFirewallRuleBackend(
+        IFirewallRuleLifecycleBackend? lifecycleBackend = null,
+        IFirewallRuleCreationBackend? creationBackend = null)
     {
         _lifecycleBackend = lifecycleBackend ?? new WindowsFirewallRuleLifecycleBackend();
+        _creationBackend = creationBackend ?? new WindowsFirewallRuleCreationBackend();
     }
+
     public SystemFirewallRuleOperationResult EnsureRule(SystemFirewallRuleDefinition definition)
     {
         try
         {
-            using FirewallRuleHandle? handle = FirewallRuleService.GetRuleHandleByName(definition.Name);
-
-            if (handle != null)
+            if (RuleExistsAndEnabled(definition.Name))
             {
-                if (!handle.Rule.Enabled)
-                {
-                    handle.Rule.Enabled = true;
-                }
-
                 return SystemFirewallRuleOperationResult.Success();
             }
 
-            var ruleType = Type.GetTypeFromProgID("HNetCfg.FWRule");
-            if (ruleType == null)
-            {
-                return SystemFirewallRuleOperationResult.Failure(
-                    "Could not load HNetCfg.FWRule type.");
-            }
+            var creationResult = _creationBackend.CreateRule(
+                new FirewallRuleCreationDefinition(
+                    definition.Name,
+                    definition.Description,
+                    definition.Enabled,
+                    MFWConstants.MainRuleGroup,
+                    (int)definition.Protocol,
+                    definition.Action == SystemFirewallRuleAction.Allow
+                        ? FirewallRuleCreationAction.Allow
+                        : FirewallRuleCreationAction.Block,
+                    definition.Direction == SystemFirewallRuleDirection.Outbound
+                        ? FirewallRuleCreationDirection.Outgoing
+                        : FirewallRuleCreationDirection.Incoming,
+                    definition.ServiceName,
+                    definition.ApplicationName,
+                    definition.LocalPorts,
+                    definition.RemotePorts,
+                    string.Empty,
+                    definition.RemotePorts,
+                    string.Empty,
+                    FirewallRuleCreationProfile.All,
+                    "All"));
 
-            var rule = (INetFwRule2)Activator.CreateInstance(ruleType)!;
-            rule.Name = definition.Name;
-            rule.Description = definition.Description;
-            rule.Direction = SystemFirewallRuleMapper.ToComDirection(definition.Direction);
-            rule.Action = SystemFirewallRuleMapper.ToComAction(definition.Action);
-            rule.Grouping = MFWConstants.MainRuleGroup;
-            rule.Enabled = SystemFirewallRuleMapper.ToComEnabled(definition.Enabled);
-            rule.InterfaceTypes = "All";
-            rule.Protocol = SystemFirewallRuleMapper.ToComProtocol(definition.Protocol);
-
-            if (definition.Protocol is SystemFirewallRuleProtocol.Tcp or SystemFirewallRuleProtocol.Udp)
-            {
-                rule.RemotePorts = definition.RemotePorts;
-                rule.LocalPorts = definition.LocalPorts;
-            }
-
-            if (!string.IsNullOrEmpty(definition.ApplicationName))
-            {
-                rule.ApplicationName = definition.ApplicationName;
-            }
-
-            if (!string.IsNullOrEmpty(definition.ServiceName))
-            {
-                rule.serviceName = definition.ServiceName;
-            }
-
-            FirewallRuleService.CreateRule(rule);
-            return SystemFirewallRuleOperationResult.Success();
+            return creationResult.Succeeded
+                ? SystemFirewallRuleOperationResult.Success()
+                : SystemFirewallRuleOperationResult.Failure(
+                    creationResult.Error ?? "Failed to create firewall rule.");
         }
         catch (COMException ex)
         {
@@ -77,8 +67,7 @@ public sealed class WindowsSystemFirewallRuleBackend : ISystemFirewallRuleBacken
     {
         try
         {
-            using FirewallRuleHandle? handle = FirewallRuleService.GetRuleHandleByName(ruleName);
-            if (handle == null)
+            if (!RuleExists(ruleName))
             {
                 return SystemFirewallRuleOperationResult.Success();
             }
@@ -91,6 +80,92 @@ public sealed class WindowsSystemFirewallRuleBackend : ISystemFirewallRuleBacken
         catch (COMException ex)
         {
             return SystemFirewallRuleOperationResult.Failure(ex.Message);
+        }
+    }
+
+    private static bool RuleExists(string ruleName)
+    {
+        return GetRuleByName(ruleName) != null;
+    }
+
+    private static bool RuleExistsAndEnabled(string ruleName)
+    {
+        INetFwRule2? rule = GetRuleByName(ruleName);
+        if (rule == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            if (!rule.Enabled)
+            {
+                rule.Enabled = true;
+            }
+
+            return true;
+        }
+        finally
+        {
+            Marshal.ReleaseComObject(rule);
+        }
+    }
+
+    private static INetFwRule2? GetRuleByName(string ruleName)
+    {
+        if (string.IsNullOrWhiteSpace(ruleName))
+        {
+            return null;
+        }
+
+        INetFwPolicy2? firewallPolicy = null;
+        INetFwRules? rulesCollection = null;
+
+        try
+        {
+            var policyType = Type.GetTypeFromProgID("HNetCfg.FwPolicy2");
+            if (policyType == null)
+            {
+                return null;
+            }
+
+            firewallPolicy = (INetFwPolicy2?)Activator.CreateInstance(policyType);
+            if (firewallPolicy == null)
+            {
+                return null;
+            }
+
+            rulesCollection = firewallPolicy.Rules;
+            if (rulesCollection == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                return rulesCollection.Item(ruleName) as INetFwRule2;
+            }
+            catch (FileNotFoundException)
+            {
+                return null;
+            }
+            catch (COMException ex)
+            {
+                Debug.WriteLine($"[ERROR] GetRuleByName ('{ruleName}'): COM error. HResult: 0x{ex.HResult:X8}. Message: {ex.Message}");
+                return null;
+            }
+        }
+        finally
+        {
+            if (rulesCollection != null)
+            {
+                Marshal.ReleaseComObject(rulesCollection);
+            }
+
+            if (firewallPolicy != null)
+            {
+                Marshal.ReleaseComObject(firewallPolicy);
+            }
         }
     }
 }
