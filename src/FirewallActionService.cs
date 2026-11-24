@@ -744,7 +744,7 @@ namespace MinimalFirewall
                 SignatureValidationService.TryGetTrustedSignerIdentity(pending.AppPath, out var signerIdentity)
                 && signerIdentity != null)
             {
-                _whitelistService.Add(
+                _whitelistService.AddTrustedCertificate(
                     signerIdentity.Sha256Thumbprint,
                     signerIdentity.DisplayName,
                     signerIdentity.Subject);
