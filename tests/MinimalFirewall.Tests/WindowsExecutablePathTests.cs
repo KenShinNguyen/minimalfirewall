@@ -62,4 +62,18 @@ public sealed class WindowsExecutablePathTests
 
         Assert.Equal(new[] { "/select,", targetPath }, startInfo.ArgumentList);
     }
+    [Fact]
+    public void RunHiddenCommand_DrainsStandardOutputAndErrorConcurrently()
+    {
+        string commandPath = ProcessHelper.GetWindowsSystemExecutablePath("cmd.exe");
+        string arguments = "/d /c \"for /L %i in (1,1,5000) do (echo stdout-1234567890& echo stderr-1234567890 1>&2)\"";
+
+        ProcessHelper.RunHiddenCommand(commandPath, arguments, out string output, out string error);
+
+        Assert.Contains("stdout-1234567890", output);
+        Assert.Contains("stderr-1234567890", error);
+        Assert.DoesNotContain("timed out", error, StringComparison.OrdinalIgnoreCase);
+    }
+
+
 }
