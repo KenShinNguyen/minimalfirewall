@@ -5,7 +5,7 @@ namespace MinimalFirewall.Tests;
 public sealed class FirewallActionsServiceLockdownTests
 {
     [Fact]
-    public void ToggleLockdown_HappyPath_RoutesPolicyAndCompletesTransition()
+    public void ToggleLockdown_HappyPath_EnablesAuditBeforePolicyAndCompletesTransition()
     {
         var backend = new FakeFirewallBackend(FirewallPolicyState.Allow);
         var service = new TestableFirewallActionsService(backend);
@@ -13,8 +13,10 @@ public sealed class FirewallActionsServiceLockdownTests
         service.ToggleLockdown();
 
         Assert.Equal(1, service.PrepareCalls);
+        Assert.Equal(1, service.AuditEnableCalls);
         Assert.Equal(1, service.VerifyCalls);
         Assert.Equal(1, service.CompleteCalls);
+        Assert.Equal(0, service.AuditRestoreCalls);
         Assert.True(service.LastPreparedState);
         Assert.True(service.LastCompletedState);
         Assert.Empty(service.LockdownMessages);
@@ -22,36 +24,93 @@ public sealed class FirewallActionsServiceLockdownTests
     }
 
     [Fact]
-    public void ToggleLockdown_Failures_FailClosedBeforeAndAfterPreparation()
+    public void ToggleLockdown_FailedAuditVerification_RestoresAuditPolicyAfterFirewallRollback()
     {
-        var readFailureBackend = new FakeFirewallBackend(
-            FirewallPolicyState.Allow,
-            readException: new InvalidOperationException("backend read failed"));
-        var readFailureService = new TestableFirewallActionsService(readFailureBackend);
+        var backend = new FakeFirewallBackend(FirewallPolicyState.Allow);
+        var service = new TestableFirewallActionsService(backend)
+        {
+            AuditPolicyVerifies = false
+        };
 
-        readFailureService.ToggleLockdown();
+        service.ToggleLockdown();
 
-        Assert.Equal(0, readFailureService.PrepareCalls);
-        Assert.Equal(0, readFailureService.VerifyCalls);
-        Assert.Equal(0, readFailureService.CompleteCalls);
-        Assert.Single(readFailureService.LockdownMessages);
-        Assert.Equal("Firewall State Unknown", readFailureService.LockdownMessages[0].Caption);
-        Assert.Contains("current Windows Firewall policy could not be read", readFailureService.LockdownMessages[0].Text);
+        Assert.Equal(1, service.AuditEnableCalls);
+        Assert.Equal(1, service.VerifyCalls);
+        Assert.Equal(1, service.AuditRestoreCalls);
+        Assert.Equal(0, service.CompleteCalls);
+        Assert.Single(service.LockdownMessages);
+        Assert.Equal("Lockdown Mode Failed", service.LockdownMessages[0].Caption);
+    }
 
-        var writeFailureBackend = new FakeFirewallBackend(
+    [Fact]
+    public void ToggleLockdown_FailedFirewallApply_RestoresAuditWhenRollbackIsComplete()
+    {
+        var backend = new FakeFirewallBackend(
             FirewallPolicyState.Allow,
             writeException: new InvalidOperationException("backend write failed"));
-        var writeFailureService = new TestableFirewallActionsService(writeFailureBackend);
+        var service = new TestableFirewallActionsService(backend);
 
-        writeFailureService.ToggleLockdown();
+        service.ToggleLockdown();
 
-        Assert.Equal(1, writeFailureService.PrepareCalls);
-        Assert.Equal(1, writeFailureService.VerifyCalls);
-        Assert.Equal(0, writeFailureService.CompleteCalls);
-        Assert.Single(writeFailureService.LockdownMessages);
-        Assert.Equal("Lockdown Error", writeFailureService.LockdownMessages[0].Caption);
-        Assert.Contains("default outbound policy", writeFailureService.LockdownMessages[0].Text);
-        Assert.Equal(FirewallOutboundAction.Block, writeFailureBackend.LastRequestedAction);
+        Assert.Equal(1, service.AuditEnableCalls);
+        Assert.Equal(1, service.VerifyCalls);
+        Assert.Equal(1, service.AuditRestoreCalls);
+        Assert.Equal(0, service.CompleteCalls);
+        Assert.Single(service.LockdownMessages);
+        Assert.Equal("Lockdown Error", service.LockdownMessages[0].Caption);
+        Assert.Contains("default outbound policy", service.LockdownMessages[0].Text);
+    }
+
+    [Fact]
+    public void ToggleLockdown_UnlockApplyFailure_DoesNotRestoreAuditWhileFirewallMayRemainLocked()
+    {
+        var backend = new FakeFirewallBackend(
+            FirewallPolicyState.Block,
+            writeException: new InvalidOperationException("backend write failed"));
+        var service = new TestableFirewallActionsService(backend);
+
+        service.ToggleLockdown();
+
+        Assert.Equal(0, service.AuditEnableCalls);
+        Assert.Equal(0, service.VerifyCalls);
+        Assert.Equal(0, service.AuditRestoreCalls);
+        Assert.Equal(0, service.CompleteCalls);
+        Assert.Equal(FirewallOutboundAction.Allow, backend.LastRequestedAction);
+    }
+
+    [Fact]
+    public void ToggleLockdown_SuccessfulUnlock_RestoresAuditOnlyAfterFirewallTransition()
+    {
+        var backend = new FakeFirewallBackend(FirewallPolicyState.Block);
+        var service = new TestableFirewallActionsService(backend);
+
+        service.ToggleLockdown();
+
+        Assert.Equal(0, service.AuditEnableCalls);
+        Assert.Equal(0, service.VerifyCalls);
+        Assert.Equal(1, service.CompleteCalls);
+        Assert.Equal(1, service.AuditRestoreCalls);
+        Assert.False(service.LastCompletedState);
+        Assert.Equal(FirewallOutboundAction.Allow, backend.LastRequestedAction);
+    }
+
+    [Fact]
+    public void ToggleLockdown_ReadFailureDoesNotTouchAuditPolicy()
+    {
+        var backend = new FakeFirewallBackend(
+            FirewallPolicyState.Allow,
+            readException: new InvalidOperationException("backend read failed"));
+        var service = new TestableFirewallActionsService(backend);
+
+        service.ToggleLockdown();
+
+        Assert.Equal(0, service.PrepareCalls);
+        Assert.Equal(0, service.AuditEnableCalls);
+        Assert.Equal(0, service.VerifyCalls);
+        Assert.Equal(0, service.AuditRestoreCalls);
+        Assert.Equal(0, service.CompleteCalls);
+        Assert.Single(service.LockdownMessages);
+        Assert.Equal("Firewall State Unknown", service.LockdownMessages[0].Caption);
     }
 
     private sealed class TestableFirewallActionsService : FirewallActionsService
@@ -69,10 +128,13 @@ public sealed class FirewallActionsServiceLockdownTests
         }
 
         public int PrepareCalls { get; private set; }
+        public int AuditEnableCalls { get; private set; }
+        public int AuditRestoreCalls { get; private set; }
         public int VerifyCalls { get; private set; }
         public int CompleteCalls { get; private set; }
         public bool LastPreparedState { get; private set; }
         public bool LastCompletedState { get; private set; }
+        public bool AuditPolicyVerifies { get; set; } = true;
 
         public List<LockdownMessage> LockdownMessages { get; } = [];
 
@@ -82,16 +144,30 @@ public sealed class FirewallActionsServiceLockdownTests
             LastPreparedState = enableLockdown;
         }
 
+        protected override void EnableLockdownAuditPolicy()
+        {
+            AuditEnableCalls++;
+        }
+
+        protected override void RestoreLockdownAuditPolicy()
+        {
+            AuditRestoreCalls++;
+        }
+
         protected override bool VerifyLockdownAuditPolicy()
         {
             VerifyCalls++;
-            return true;
+            return AuditPolicyVerifies;
         }
 
         protected override void CompleteLockdownTransition(bool lockdownEnabled)
         {
             CompleteCalls++;
             LastCompletedState = lockdownEnabled;
+            if (!lockdownEnabled)
+            {
+                RestoreLockdownAuditPolicy();
+            }
         }
 
         protected override void ShowLockdownMessage(string text, string caption)
