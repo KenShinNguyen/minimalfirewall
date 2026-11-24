@@ -17,6 +17,7 @@ public sealed class FirewallActionsServiceLockdownTests
         Assert.Equal(1, service.CompleteCalls);
         Assert.True(service.LastPreparedState);
         Assert.True(service.LastCompletedState);
+        Assert.Empty(service.LockdownMessages);
         Assert.Equal(FirewallOutboundAction.Block, backend.LastRequestedAction);
     }
 
@@ -33,6 +34,9 @@ public sealed class FirewallActionsServiceLockdownTests
         Assert.Equal(0, readFailureService.PrepareCalls);
         Assert.Equal(0, readFailureService.VerifyCalls);
         Assert.Equal(0, readFailureService.CompleteCalls);
+        Assert.Single(readFailureService.LockdownMessages);
+        Assert.Equal("Firewall State Unknown", readFailureService.LockdownMessages[0].Caption);
+        Assert.Contains("current Windows Firewall policy could not be read", readFailureService.LockdownMessages[0].Text);
 
         var writeFailureBackend = new FakeFirewallBackend(
             FirewallPolicyState.Allow,
@@ -44,6 +48,9 @@ public sealed class FirewallActionsServiceLockdownTests
         Assert.Equal(1, writeFailureService.PrepareCalls);
         Assert.Equal(1, writeFailureService.VerifyCalls);
         Assert.Equal(0, writeFailureService.CompleteCalls);
+        Assert.Single(writeFailureService.LockdownMessages);
+        Assert.Equal("Lockdown Error", writeFailureService.LockdownMessages[0].Caption);
+        Assert.Contains("default outbound policy", writeFailureService.LockdownMessages[0].Text);
         Assert.Equal(FirewallOutboundAction.Block, writeFailureBackend.LastRequestedAction);
     }
 
@@ -68,6 +75,8 @@ public sealed class FirewallActionsServiceLockdownTests
         public bool LastPreparedState { get; private set; }
         public bool LastCompletedState { get; private set; }
 
+        public List<LockdownMessage> LockdownMessages { get; } = [];
+
         protected override void PrepareLockdownPrerequisites(bool enableLockdown)
         {
             PrepareCalls++;
@@ -85,7 +94,14 @@ public sealed class FirewallActionsServiceLockdownTests
             CompleteCalls++;
             LastCompletedState = lockdownEnabled;
         }
+
+        protected override void ShowLockdownMessage(string text, string caption)
+        {
+            LockdownMessages.Add(new LockdownMessage(text, caption));
+        }
     }
+
+    private sealed record LockdownMessage(string Text, string Caption);
 
     private sealed class FakeFirewallBackend : IFirewallBackend
     {
