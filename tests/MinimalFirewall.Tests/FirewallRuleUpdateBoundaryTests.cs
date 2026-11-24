@@ -5,12 +5,20 @@ namespace MinimalFirewall.Tests;
 public sealed class FirewallRuleUpdateBoundaryTests
 {
     [Fact]
-    public void UpdateBackendContract_IsComFree()
+    public void UpdateBackendContract_IsComFreeAndDoesNotExposeExceptions()
     {
         var method = typeof(IFirewallRuleUpdateBackend).GetMethod(nameof(IFirewallRuleUpdateBackend.UpdateRemoteAddresses));
 
         Assert.NotNull(method);
         Assert.Equal(typeof(FirewallRuleUpdateResult), method!.ReturnType);
+        Assert.All(method.GetParameters(), parameter =>
+            Assert.Equal(typeof(string), parameter.ParameterType));
+        Assert.DoesNotContain(
+            typeof(FirewallRuleUpdateResult).GetProperties(),
+            property => typeof(Exception).IsAssignableFrom(property.PropertyType));
+        Assert.DoesNotContain(
+            typeof(FirewallRuleUpdateResult).GetProperties(),
+            property => property.PropertyType.Namespace?.StartsWith("NetFwTypeLib", StringComparison.Ordinal) == true);
     }
 
     [Fact]
