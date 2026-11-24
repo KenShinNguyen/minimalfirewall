@@ -313,9 +313,50 @@ namespace MinimalFirewall
 
     public static class ProcessHelper
     {
+        internal static string GetWindowsSystemExecutablePath(string executableName) =>
+            CombineWindowsExecutablePath(Environment.SystemDirectory, executableName);
+
+        internal static string GetWindowsDirectoryExecutablePath(string executableName) =>
+            CombineWindowsExecutablePath(Environment.GetFolderPath(Environment.SpecialFolder.Windows), executableName);
+
+        private static string CombineWindowsExecutablePath(string directory, string executableName)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(directory);
+            ArgumentException.ThrowIfNullOrWhiteSpace(executableName);
+
+            if (Path.IsPathRooted(executableName)
+                || !string.Equals(Path.GetFileName(executableName), executableName, StringComparison.Ordinal)
+                || executableName is "." or ".."
+                || !executableName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException("A Windows executable file name without a directory is required.", nameof(executableName));
+            }
+
+            if (!Path.IsPathFullyQualified(directory))
+            {
+                throw new InvalidOperationException("The Windows executable directory is not an absolute path.");
+            }
+
+            return Path.Combine(directory, executableName);
+        }
+
+        internal static ProcessStartInfo CreateExplorerSelectStartInfo(string targetPath)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(targetPath);
+
+            var startInfo = new ProcessStartInfo(GetWindowsDirectoryExecutablePath("explorer.exe"))
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            startInfo.ArgumentList.Add("/select,");
+            startInfo.ArgumentList.Add(targetPath.Trim('"'));
+
+            return startInfo;
+        }
         public static void RunHiddenCommand(string fileName, string arguments, out string output, out string error)
         {
-            string safePath = Path.IsPathRooted(fileName) ? fileName : Path.Combine(Environment.SystemDirectory, fileName);
+            string safePath = Path.IsPathRooted(fileName) ? fileName : GetWindowsSystemExecutablePath(fileName);
             Debug.WriteLine($"[ProcessHelper] Executing: {safePath} {arguments}");
 
             var startInfo = new ProcessStartInfo
@@ -332,18 +373,59 @@ namespace MinimalFirewall
 
             try
             {
-                using var process = Process.Start(startInfo);
-                if (process != null)
-                {
-                    output = process.StandardOutput.ReadToEnd();
-                    error = process.StandardError.ReadToEnd();
-                    process.WaitForExit(5000);
-                }
-                else
+                using var process = new Process { StartInfo = startInfo };
+                if (!process.Start())
                 {
                     output = string.Empty;
                     error = "Failed to start process.";
+                    return;
                 }
+
+                // Drain both redirected streams concurrently. Reading one stream to completion
+                // before starting the other can deadlock when the child fills the unread pipe.
+                Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
+                Task<string> errorTask = process.StandardError.ReadToEndAsync();
+                Task exitTask = process.WaitForExitAsync();
+                Task completionTask = Task.WhenAll(outputTask, errorTask, exitTask);
+
+                if (Task.WhenAny(completionTask, Task.Delay(TimeSpan.FromSeconds(5))).GetAwaiter().GetResult() != completionTask)
+                {
+                    Debug.WriteLine("[ProcessHelper ERROR] Process timed out; terminating the process tree.");
+                    try
+                    {
+                        if (!process.HasExited)
+                        {
+                            process.Kill(entireProcessTree: true);
+                        }
+                    }
+                    catch (Exception killException) when (killException is InvalidOperationException or System.ComponentModel.Win32Exception or System.NotSupportedException)
+                    {
+                        Debug.WriteLine($"[ProcessHelper ERROR] Could not terminate timed-out process: {killException.Message}");
+                    }
+
+                    try
+                    {
+                        process.WaitForExit(1000);
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // The process may have exited while it was being terminated.
+                    }
+
+                    Task readersTask = Task.WhenAll(outputTask, errorTask);
+                    _ = Task.WhenAny(readersTask, Task.Delay(TimeSpan.FromSeconds(1))).GetAwaiter().GetResult();
+
+                    output = outputTask.Status == TaskStatus.RanToCompletion ? outputTask.Result : string.Empty;
+                    string capturedError = errorTask.Status == TaskStatus.RanToCompletion ? errorTask.Result : string.Empty;
+                    error = string.IsNullOrWhiteSpace(capturedError)
+                        ? "Process timed out after 5 seconds."
+                        : $"Process timed out after 5 seconds. {capturedError}";
+                    return;
+                }
+
+                completionTask.GetAwaiter().GetResult();
+                output = outputTask.Result;
+                error = errorTask.Result;
             }
             catch (Exception ex)
             {
