@@ -73,7 +73,7 @@ internal sealed class WfpAuditPolicyLease
                     (packetDropOriginal & ~AuditNone) | AuditFailure),
                 new AuditPolicySetting(
                     ConnectionSubcategory,
-                    (connectionOriginal & ~AuditSuccess) | AuditFailure)
+                    (connectionOriginal & ~(AuditSuccess | AuditNone)) | AuditFailure)
             };
 
             _writePolicies(desiredPolicy);
