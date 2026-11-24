@@ -22,7 +22,7 @@ public sealed class WindowsFirewallRuleObservationBackend : IFirewallRuleObserva
         using FirewallRuleHandle? ruleHandle = FirewallRuleService.GetRuleHandleByName(ruleName);
         return ruleHandle == null
             ? null
-            : FirewallDataService.CreateAdvancedRuleViewModel(ruleHandle.Rule);
+            : FirewallDataService.CreateAdvancedRuleViewModel(WindowsFirewallRuleQueryBackend.CreateSnapshot(ruleHandle.Rule));
     }
 
     public List<AdvancedRuleViewModel> GetForeignRules(
@@ -76,7 +76,7 @@ public sealed class WindowsFirewallRuleObservationBackend : IFirewallRuleObserva
                         continue;
                     }
 
-                    rules.Add(FirewallDataService.CreateAdvancedRuleViewModel(rule));
+                    rules.Add(FirewallDataService.CreateAdvancedRuleViewModel(WindowsFirewallRuleQueryBackend.CreateSnapshot(rule)));
                 }
                 finally
                 {
