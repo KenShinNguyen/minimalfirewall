@@ -502,7 +502,7 @@ namespace MinimalFirewall
                 ShowLockdownMessage(
                     "The current Windows Firewall policy could not be read, so Lockdown was not changed.\\n\\n" +
                     "Check that the Windows Firewall service is running and that Minimal Firewall is running as Administrator.",
-                    "Firewall State Unknown", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    "Firewall State Unknown");
                 return;
             }
 
@@ -524,7 +524,7 @@ namespace MinimalFirewall
                     "1. A local or domain Group Policy is preventing this change.\\n" +
                     "2. Other security software is blocking this action.\\n\\n" +
                     "The firewall's default policy will be set back to 'Allow' for safety.",
-                    "Lockdown Mode Failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    "Lockdown Mode Failed");
 
                 var rollbackSucceeded = FirewallPolicyGuard.TrySetDefaultOutboundAction(
                     _policyBackend,
@@ -543,7 +543,7 @@ namespace MinimalFirewall
                         string.IsNullOrWhiteSpace(rollbackSummary)
                             ? "The firewall policy could not be set back to 'Allow'."
                             : "The firewall policy could not be set back to 'Allow'.\\n\\n" + rollbackSummary,
-                        "Firewall Policy Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        "Firewall Policy Error");
                 }
 
                 activityLogger.LogDebug("Lockdown Mode Failed: Could not enable audit policy.");
@@ -571,7 +571,7 @@ namespace MinimalFirewall
                     message + (string.IsNullOrWhiteSpace(applySummary)
                         ? "Failed to change the default outbound policy."
                         : applySummary),
-                    "Lockdown Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    "Lockdown Error");
                 return;
             }
 
