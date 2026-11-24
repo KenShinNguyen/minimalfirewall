@@ -218,7 +218,7 @@ namespace MinimalFirewall
             return string.IsNullOrEmpty(commonName) ? value : commonName;
         }
 
-        public bool IsTrusted(string sha256Thumbprint)
+        public bool IsCertificateTrusted(string sha256Thumbprint)
         {
             if (!TryNormalizeSha256Thumbprint(sha256Thumbprint, out string normalized))
             {
@@ -231,7 +231,7 @@ namespace MinimalFirewall
             }
         }
 
-        public void Add(string sha256Thumbprint, string displayName, string subject)
+        public void AddTrustedCertificate(string sha256Thumbprint, string displayName, string subject)
         {
             if (!TryNormalizeSha256Thumbprint(sha256Thumbprint, out string normalized)
                 || string.IsNullOrWhiteSpace(displayName)
