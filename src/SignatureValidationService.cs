@@ -67,7 +67,7 @@ namespace MinimalFirewall
                 return false;
             }
 
-            // File integrity verified. Extract publisher name for display/whitelist matching.
+            // File integrity verified. Extract the publisher name for display.
             try
             {
 #pragma warning disable SYSLIB0057 // CreateFromSignedFile has no direct replacement for Authenticode signer extraction
