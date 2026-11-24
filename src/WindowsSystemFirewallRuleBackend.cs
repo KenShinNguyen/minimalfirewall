@@ -43,7 +43,7 @@ public sealed class WindowsSystemFirewallRuleBackend : ISystemFirewallRuleBacken
                     definition.LocalPorts,
                     definition.RemotePorts,
                     string.Empty,
-                    definition.RemotePorts,
+                    string.Empty,
                     string.Empty,
                     FirewallRuleCreationProfile.All,
                     "All"));
