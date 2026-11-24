@@ -71,8 +71,8 @@ public sealed class TemporaryAndWildcardRuleBehaviorTests
         using var storage = new WildcardRuleTestStorage();
         using var service = storage.CreateService();
 
-        service.AddRule(Rule("C:\Apps", "*.exe", "Block"));
-        service.AddRule(Rule("c:\apps", "*.EXE", "Allow"));
+        service.AddRule(Rule(@"C:\Apps", "*.exe", "Block"));
+        service.AddRule(Rule(@"c:\apps", "*.EXE", "Allow"));
 
         var rules = service.GetRules();
 
@@ -86,26 +86,26 @@ public sealed class TemporaryAndWildcardRuleBehaviorTests
         using var storage = new WildcardRuleTestStorage();
         using var service = storage.CreateService();
 
-        var rule = Rule("C:\Apps\*", "client-?.exe", "Block");
+        var rule = Rule(@"C:\Apps\*", "client-?.exe", "Block");
         service.AddRule(rule);
 
-        Assert.Same(rule, service.Match("c:\apps\Tools\CLIENT-1.EXE"));
-        Assert.Null(service.Match("c:\apps\Tools\CLIENT-12.EXE"));
-        Assert.Null(service.Match("c:\other\CLIENT-1.EXE"));
+        Assert.Same(rule, service.Match(@"c:\apps\Tools\CLIENT-1.EXE"));
+        Assert.Null(service.Match(@"c:\apps\Tools\CLIENT-12.EXE"));
+        Assert.Null(service.Match(@"c:\other\CLIENT-1.EXE"));
     }
 
     [Fact]
     public void WildcardRuleService_RemoveRuleInvalidatesMatchAndPersists()
     {
         using var storage = new WildcardRuleTestStorage();
-        var rule = Rule("C:\Apps", "*.exe", "Block");
+        var rule = Rule(@"C:\Apps", "*.exe", "Block");
 
         using (var service = storage.CreateService())
         {
             service.AddRule(rule);
-            Assert.NotNull(service.Match("C:\Apps\demo.exe"));
+            Assert.NotNull(service.Match(@"C:\Apps\demo.exe"));
             service.RemoveRule(rule);
-            Assert.Null(service.Match("C:\Apps\demo.exe"));
+            Assert.Null(service.Match(@"C:\Apps\demo.exe"));
         }
 
         using var reloaded = storage.CreateService();
@@ -118,14 +118,14 @@ public sealed class TemporaryAndWildcardRuleBehaviorTests
         using var storage = new WildcardRuleTestStorage();
         using var service = storage.CreateService();
 
-        service.AddRule(Rule("C:\Apps", "*.exe", "Block"));
-        service.AddRule(Rule("C:\Tools", "*.dll", "Allow"));
+        service.AddRule(Rule(@"C:\Apps", "*.exe", "Block"));
+        service.AddRule(Rule(@"C:\Tools", "*.dll", "Allow"));
 
         service.ClearRules();
 
         Assert.Empty(service.GetRules());
-        Assert.Null(service.Match("C:\Apps\demo.exe"));
-        Assert.Null(service.Match("C:\Tools\demo.dll"));
+        Assert.Null(service.Match(@"C:\Apps\demo.exe"));
+        Assert.Null(service.Match(@"C:\Tools\demo.dll"));
     }
 
     private static WildcardRule Rule(string folderPath, string exeName, string action)
