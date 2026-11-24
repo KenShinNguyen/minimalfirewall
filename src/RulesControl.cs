@@ -1,4 +1,3 @@
-using NetFwTypeLib;
 using MinimalFirewall.TypedObjects;
 using DarkModeForms;
 using System.Data;
