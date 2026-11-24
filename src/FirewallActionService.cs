@@ -209,7 +209,6 @@ namespace MinimalFirewall
                         else
                         {
                             LogQueryFailure(inboundQuery, $"Get conflicting inbound application rules for {appPath} failed.");
-                            continue;
                         }
                     }
                     if (action.Contains("Outbound") || action.Contains("(All)"))
@@ -223,7 +222,6 @@ namespace MinimalFirewall
                         else
                         {
                             LogQueryFailure(outboundQuery, $"Get conflicting outbound application rules for {appPath} failed.");
-                            continue;
                         }
                     }
                 }
