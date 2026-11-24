@@ -153,16 +153,21 @@ namespace MinimalFirewall
                     return;
                 }
 
-                string? publisherName = null;
-                bool hasInfo = await Task.Run(() => SignatureValidationService.IsSignatureTrusted(PendingConnection.AppPath, out publisherName));
+                PublisherCertificateIdentity? publisherIdentity = await Task.Run(() =>
+                    SignatureValidationService.TryGetPublisherIdentity(PendingConnection.AppPath, out var identity)
+                        ? identity
+                        : null);
 
-                if (hasInfo && !string.IsNullOrEmpty(publisherName))
+                if (publisherIdentity != null)
                 {
-                    if (publisherName.Length > 30)
+                    string publisherName = publisherIdentity.DisplayName;
+                    if (publisherName.Length > 24)
                     {
-                        publisherName = string.Concat(publisherName.AsSpan(0, 30), "...");
+                        publisherName = string.Concat(publisherName.AsSpan(0, 24), "...");
                     }
-                    trustPublisherCheckBox.Text = $"Trust: {publisherName}";
+
+                    string shortFingerprint = publisherIdentity.Sha256Thumbprint[..12];
+                    trustPublisherCheckBox.Text = $"Trust {publisherName} [{shortFingerprint}]";
                     trustPublisherCheckBox.Visible = true;
                 }
                 else
