@@ -53,13 +53,13 @@ public sealed class SafeAsyncRunnerTests
     public async Task RunBackground_WhenPreviousExecutionInFlight_SkipsOverlappingCallAndResetsFlagAfterCompletion()
     {
         var logger = new TestAppLogger();
-        int inFlight = 0;
+        var gate = new AsyncRunGate();
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         int executions = 0;
 
         SafeAsyncRunner.RunBackground(
             async () => { Interlocked.Increment(ref executions); await release.Task; },
-            logger, "Test", "Background", ref inFlight);
+            logger, "Test", "Background", gate);
 
         await Task.Delay(50);
         SafeAsyncRunner.RunBackground(
@@ -69,7 +69,7 @@ public sealed class SafeAsyncRunnerTests
         Assert.Equal(1, executions);
         release.TrySetResult();
         await Task.Delay(50);
-        Assert.Equal(0, Volatile.Read(ref inFlight));
+        Assert.False(gate.IsInFlight);
 
         SafeAsyncRunner.RunBackground(
             () => { Interlocked.Increment(ref executions); return Task.CompletedTask; },
