@@ -487,6 +487,11 @@ namespace MinimalFirewall
             MessageBox.Show(text, caption, buttons, icon);
         }
 
+        protected virtual void ShowLockdownMessage(string text, string caption)
+        {
+            SafeShowMessageBox(text, caption, MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+
         public void ToggleLockdown()
         {
             if (!FirewallPolicyGuard.TryGetToggleAction(
@@ -494,10 +499,10 @@ namespace MinimalFirewall
                     out var targetAction))
             {
                 activityLogger.LogDebug("Toggle Lockdown aborted: the current firewall policy could not be read.");
-                SafeShowMessageBox(
+                ShowLockdownMessage(
                     "The current Windows Firewall policy could not be read, so Lockdown was not changed.\\n\\n" +
                     "Check that the Windows Firewall service is running and that Minimal Firewall is running as Administrator.",
-                    "Firewall State Unknown", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    "Firewall State Unknown");
                 return;
             }
 
@@ -512,14 +517,14 @@ namespace MinimalFirewall
 
             if (newLockdownState && !VerifyLockdownAuditPolicy())
             {
-                SafeShowMessageBox(
+                ShowLockdownMessage(
                     "Failed to verify that Windows Security Auditing was enabled.\\n\\n" +
                     "The Lockdown dashboard will not be able to detect blocked connections.\\n\\n" +
                     "Potential Causes:\\n" +
                     "1. A local or domain Group Policy is preventing this change.\\n" +
                     "2. Other security software is blocking this action.\\n\\n" +
                     "The firewall's default policy will be set back to 'Allow' for safety.",
-                    "Lockdown Mode Failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    "Lockdown Mode Failed");
 
                 var rollbackSucceeded = FirewallPolicyGuard.TrySetDefaultOutboundAction(
                     _policyBackend,
@@ -534,11 +539,11 @@ namespace MinimalFirewall
                             ? "Failed to revert outbound policy to Allow after audit failure."
                             : $"Failed to revert outbound policy to Allow after audit failure.\\n{rollbackSummary}");
 
-                    SafeShowMessageBox(
+                    ShowLockdownMessage(
                         string.IsNullOrWhiteSpace(rollbackSummary)
                             ? "The firewall policy could not be set back to 'Allow'."
                             : "The firewall policy could not be set back to 'Allow'.\\n\\n" + rollbackSummary,
-                        "Firewall Policy Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        "Firewall Policy Error");
                 }
 
                 activityLogger.LogDebug("Lockdown Mode Failed: Could not enable audit policy.");
@@ -562,11 +567,11 @@ namespace MinimalFirewall
                     ? "The default outbound policy could not be changed, and restoring the previous policy did not fully succeed.\\n\\n"
                     : "The default outbound policy was not changed.\\n\\n";
 
-                SafeShowMessageBox(
+                ShowLockdownMessage(
                     message + (string.IsNullOrWhiteSpace(applySummary)
                         ? "Failed to change the default outbound policy."
                         : applySummary),
-                    "Lockdown Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    "Lockdown Error");
                 return;
             }
 
