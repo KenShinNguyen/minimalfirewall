@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+using System.Reflection;
 using Xunit;
 
 namespace MinimalFirewall.Tests;
@@ -45,7 +47,7 @@ public sealed class FirewallRuleLifecycleBoundaryTests
 
         service.DeleteRulesForWildcard(new WildcardRule { FolderPath = @"C:\Apps\*" });
 
-        Assert.Equal(["MFW - Wildcard: C:\\Apps\\*]"], backend.DeletedByDescription);
+        Assert.Equal(["MFW_Wildcard_Path:[C:\\Apps\\*]"], backend.DeletedByDescription);
     }
 
     [Fact]
@@ -60,6 +62,39 @@ public sealed class FirewallRuleLifecycleBoundaryTests
     }
 
     [Fact]
+    public void EnableForeignRule_RoutesToLifecycleBackend()
+    {
+        var backend = new FakeLifecycleBackend();
+        var service = CreateService(backend);
+
+        service.EnableForeignRule(CreateForeignRuleChange("Foreign Rule"));
+
+        Assert.Equal(["Foreign Rule"], backend.EnabledByName);
+    }
+
+    [Fact]
+    public void DisableForeignRule_RoutesToLifecycleBackend()
+    {
+        var backend = new FakeLifecycleBackend();
+        var service = CreateService(backend);
+
+        service.DisableForeignRule(CreateForeignRuleChange("Foreign Rule"));
+
+        Assert.Equal(["Foreign Rule"], backend.DisabledByName);
+    }
+
+    [Fact]
+    public void AcceptForeignRule_RoutesToLifecycleBackend()
+    {
+        var backend = new FakeLifecycleBackend();
+        var service = CreateService(backend);
+
+        service.AcceptForeignRule(CreateForeignRuleChange("Foreign Rule"));
+
+        Assert.Equal(["Foreign Rule"], backend.EnabledByName);
+    }
+
+    [Fact]
     public void LifecycleBackendFailure_DoesNotThrowOrShowMessageBox()
     {
         var backend = new FakeLifecycleBackend { Failure = "simulated lifecycle failure" };
@@ -68,6 +103,21 @@ public sealed class FirewallRuleLifecycleBoundaryTests
         service.DeleteApplicationRules(["C:\\Apps\\demo.exe"]);
 
         Assert.Equal(1, backend.DeleteByPathCalls);
+    }
+
+    private static FirewallRuleChange CreateForeignRuleChange(string ruleName)
+    {
+        var change = (FirewallRuleChange)RuntimeHelpers.GetUninitializedObject(typeof(FirewallRuleChange));
+        var ruleProperty = typeof(FirewallRuleChange).GetProperty("Rule", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("FirewallRuleChange.Rule property was not found.");
+
+        var rule = RuntimeHelpers.GetUninitializedObject(ruleProperty.PropertyType);
+        var nameProperty = ruleProperty.PropertyType.GetProperty("Name", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("Foreign rule Name property was not found.");
+
+        nameProperty.SetValue(rule, ruleName);
+        ruleProperty.SetValue(change, rule);
+        return change;
     }
 
     private static FirewallActionsService CreateService(FakeLifecycleBackend backend)
@@ -90,6 +140,8 @@ public sealed class FirewallRuleLifecycleBoundaryTests
         public List<string> DeletedByName { get; } = [];
         public List<string> DeletedByDescription { get; } = [];
         public List<string> DeletedByGroup { get; } = [];
+        public List<string> EnabledByName { get; } = [];
+        public List<string> DisabledByName { get; } = [];
         public int DeleteByPathCalls { get; private set; }
         public string? Failure { get; init; }
 
@@ -126,9 +178,17 @@ public sealed class FirewallRuleLifecycleBoundaryTests
 
         public FirewallRuleLifecycleOperationResult DeleteAllMfwRules() => Result();
 
-        public FirewallRuleLifecycleOperationResult EnableByName(string ruleName) => Result();
+        public FirewallRuleLifecycleOperationResult EnableByName(string ruleName)
+        {
+            EnabledByName.Add(ruleName);
+            return Result();
+        }
 
-        public FirewallRuleLifecycleOperationResult DisableByName(string ruleName) => Result();
+        public FirewallRuleLifecycleOperationResult DisableByName(string ruleName)
+        {
+            DisabledByName.Add(ruleName);
+            return Result();
+        }
 
         private FirewallRuleLifecycleOperationResult Result() =>
             Failure == null
