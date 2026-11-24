@@ -19,8 +19,14 @@ namespace MinimalFirewall
         private Dictionary<WildcardRule, (Regex? FolderRegex, Regex? ExeRegex)> _regexCache = [];
 
         public WildcardRuleService()
+            : this(ConfigPathManager.GetConfigPath("wildcard_rules.json"))
         {
-            _configPath = ConfigPathManager.GetConfigPath("wildcard_rules.json");
+        }
+
+        internal WildcardRuleService(string configPath)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(configPath);
+            _configPath = configPath;
             LoadRules();
         }
 

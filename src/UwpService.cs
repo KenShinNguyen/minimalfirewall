@@ -22,8 +22,14 @@ namespace MinimalFirewall
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         public UwpService()
+            : this(ConfigPathManager.GetConfigPath("uwp_apps.json"))
         {
-            _cachePath = ConfigPathManager.GetConfigPath("uwp_apps.json");
+        }
+
+        internal UwpService(string cachePath)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(cachePath);
+            _cachePath = cachePath;
         }
 
         public async Task<List<UwpApp>> GetUwpAppsAsync(CancellationToken token)

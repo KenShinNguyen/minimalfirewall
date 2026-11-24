@@ -32,7 +32,7 @@ namespace MinimalFirewall
         private readonly ConcurrentDictionary<uint, (string Name, string Path, string ServiceName)> _processCache = new();
 
         private readonly System.Threading.Timer? _sentryRefreshDebounceTimer;
-        private readonly System.Threading.Timer _dnsRefreshTimer;
+        private readonly System.Threading.Timer? _dnsRefreshTimer;
         private readonly System.Threading.SynchronizationContext? _uiContext;
 
         private int _isDnsRefreshing = 0;
@@ -61,7 +61,8 @@ namespace MinimalFirewall
             FirewallEventListenerService eventListenerService,
             AppSettings appSettings,
             UserActivityLogger activityLogger,
-            FirewallActionsService actionsService)
+            FirewallActionsService actionsService,
+            bool startBackgroundServices = true)
         {
             _ruleUpdateBackend = ruleUpdateBackend;
             _wildcardRuleService = wildcardRuleService;
@@ -75,19 +76,34 @@ namespace MinimalFirewall
             _actionsService = actionsService;
 
             _snapshotService = new FirewallSnapshotService();
-            _sentryRefreshDebounceTimer = new System.Threading.Timer(DebouncedSentryRefresh, null, Timeout.Infinite, Timeout.Infinite);
             _uiContext = System.Threading.SynchronizationContext.Current;
 
-            _firewallSentryService.RuleSetChanged += OnRuleSetChanged;
-            _eventListenerService.PendingConnectionDetected += OnPendingConnectionDetected;
+            // Tests can exercise the view-model state transitions without starting
+            // WMI/Event Log listeners, an immediate sentry scan, or recurring timers.
+            if (startBackgroundServices)
+            {
+                _sentryRefreshDebounceTimer = new System.Threading.Timer(
+                    DebouncedSentryRefresh,
+                    null,
+                    Timeout.Infinite,
+                    Timeout.Infinite);
 
-            _backgroundTaskService.StatusChanged += OnBackgroundStatusChanged;
+                _firewallSentryService.RuleSetChanged += OnRuleSetChanged;
+                _eventListenerService.PendingConnectionDetected += OnPendingConnectionDetected;
+                _backgroundTaskService.StatusChanged += OnBackgroundStatusChanged;
 
-            DebouncedSentryRefresh(null);
+                DebouncedSentryRefresh(null);
 
-            // Start 1 min after launch, then every 4 min or user defined
-            int dnsInterval = _appSettings != null && _appSettings.DnsRefreshIntervalMinutes > 0 ? _appSettings.DnsRefreshIntervalMinutes : 4;
-            _dnsRefreshTimer = new System.Threading.Timer(async _ => await SafeRunDnsRefreshAsync(), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(dnsInterval));
+                // Start 1 min after launch, then every 4 min or user defined.
+                int dnsInterval = _appSettings != null && _appSettings.DnsRefreshIntervalMinutes > 0
+                    ? _appSettings.DnsRefreshIntervalMinutes
+                    : 4;
+                _dnsRefreshTimer = new System.Threading.Timer(
+                    async _ => await SafeRunDnsRefreshAsync(),
+                    null,
+                    TimeSpan.FromMinutes(1),
+                    TimeSpan.FromMinutes(dnsInterval));
+            }
         }
 
         /// <summary>
@@ -1085,10 +1101,23 @@ namespace MinimalFirewall
 
         public void Dispose()
         {
-            // Unsubscribe before disposing the timer
-            _firewallSentryService.RuleSetChanged -= OnRuleSetChanged;
-            _eventListenerService.PendingConnectionDetected -= OnPendingConnectionDetected;
-            _backgroundTaskService.StatusChanged -= OnBackgroundStatusChanged;
+            // Unsubscribe before disposing timers. Test-mode instances intentionally
+            // omit background collaborators and therefore have nothing to unsubscribe.
+            if (_firewallSentryService != null)
+            {
+                _firewallSentryService.RuleSetChanged -= OnRuleSetChanged;
+            }
+
+            if (_eventListenerService != null)
+            {
+                _eventListenerService.PendingConnectionDetected -= OnPendingConnectionDetected;
+            }
+
+            if (_backgroundTaskService != null)
+            {
+                _backgroundTaskService.StatusChanged -= OnBackgroundStatusChanged;
+            }
+
             _sentryRefreshDebounceTimer?.Dispose();
             _dnsRefreshTimer?.Dispose();
             GC.SuppressFinalize(this);
