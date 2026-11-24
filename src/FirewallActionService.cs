@@ -487,6 +487,11 @@ namespace MinimalFirewall
             MessageBox.Show(text, caption, buttons, icon);
         }
 
+        protected virtual void ShowLockdownMessage(string text, string caption)
+        {
+            SafeShowMessageBox(text, caption, MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+
         public void ToggleLockdown()
         {
             if (!FirewallPolicyGuard.TryGetToggleAction(
@@ -494,7 +499,7 @@ namespace MinimalFirewall
                     out var targetAction))
             {
                 activityLogger.LogDebug("Toggle Lockdown aborted: the current firewall policy could not be read.");
-                SafeShowMessageBox(
+                ShowLockdownMessage(
                     "The current Windows Firewall policy could not be read, so Lockdown was not changed.\\n\\n" +
                     "Check that the Windows Firewall service is running and that Minimal Firewall is running as Administrator.",
                     "Firewall State Unknown", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -512,7 +517,7 @@ namespace MinimalFirewall
 
             if (newLockdownState && !VerifyLockdownAuditPolicy())
             {
-                SafeShowMessageBox(
+                ShowLockdownMessage(
                     "Failed to verify that Windows Security Auditing was enabled.\\n\\n" +
                     "The Lockdown dashboard will not be able to detect blocked connections.\\n\\n" +
                     "Potential Causes:\\n" +
@@ -534,7 +539,7 @@ namespace MinimalFirewall
                             ? "Failed to revert outbound policy to Allow after audit failure."
                             : $"Failed to revert outbound policy to Allow after audit failure.\\n{rollbackSummary}");
 
-                    SafeShowMessageBox(
+                    ShowLockdownMessage(
                         string.IsNullOrWhiteSpace(rollbackSummary)
                             ? "The firewall policy could not be set back to 'Allow'."
                             : "The firewall policy could not be set back to 'Allow'.\\n\\n" + rollbackSummary,
@@ -562,7 +567,7 @@ namespace MinimalFirewall
                     ? "The default outbound policy could not be changed, and restoring the previous policy did not fully succeed.\\n\\n"
                     : "The default outbound policy was not changed.\\n\\n";
 
-                SafeShowMessageBox(
+                ShowLockdownMessage(
                     message + (string.IsNullOrWhiteSpace(applySummary)
                         ? "Failed to change the default outbound policy."
                         : applySummary),
