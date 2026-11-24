@@ -73,194 +73,38 @@ namespace MinimalFirewall
     }
 
     public static bool IsSignatureTrusted(string filePath, out string? publisherName)
-        {
-            publisherName = null;
-
-            if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
-            {
-                return false;
-            }
-
-            // Gate on Authenticode digest verification. WinVerifyTrust validates that the
-            // file's hash matches its embedded or catalog signature AND that the signer
-            // chains to a trusted root. Without this gate, a tampered file would still
-            // expose its original signer's CN via CreateFromSignedFile.
-            if (!VerifyWithWinTrust(filePath))
-            {
-                return false;
-            }
-
-            // File integrity verified. Extract publisher name for display/whitelist matching.
-            try
-            {
-#pragma warning disable SYSLIB0057 // CreateFromSignedFile has no direct replacement for Authenticode signer extraction
-                using var basicCert = X509Certificate.CreateFromSignedFile(filePath);
-                using var cert = new X509Certificate2(basicCert);
-#pragma warning restore SYSLIB0057
-                publisherName = NormalizePublisherName(cert.Subject);
-            }
-            catch (CryptographicException)
-            {
-                // Catalog-signed: no embedded cert. Fall back to PE metadata.
-                publisherName = GetPublisherNameFromFileVersion(filePath);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                Debug.WriteLine($"[INFO] Signer extraction failed for {filePath}: {ex.Message}");
-                return false;
-            }
-
-            return !string.IsNullOrEmpty(publisherName);
-        }
-
-        private static string? NormalizePublisherName(string? subject)
-        {
-            if (string.IsNullOrEmpty(subject))
-            {
-                return null;
-            }
-
-            const string cnPrefix = "CN=";
-            int cnStart = subject.IndexOf(cnPrefix, StringComparison.Ordinal);
-            if (cnStart < 0)
-            {
-                return subject;
-            }
-
-            cnStart += cnPrefix.Length;
-            int cnEnd = subject.IndexOf(',', cnStart);
-            string cn = cnEnd < 0
-                ? subject.Substring(cnStart).Trim()
-                : subject.Substring(cnStart, cnEnd - cnStart).Trim();
-
-            return string.IsNullOrEmpty(cn) ? subject : cn;
-        }
-
-        private static bool VerifyWithWinTrust(string filePath, uint revocationChecks = WTD_REVOKE_WHOLECHAIN, uint providerFlags = WTD_REVOCATION_CHECK_CHAIN)
-        {
-            IntPtr pFilePath = IntPtr.Zero;
-            IntPtr pFileInfo = IntPtr.Zero;
-            IntPtr pTrustData = IntPtr.Zero;
-            IntPtr pActionId = IntPtr.Zero;
-
-            try
-            {
-                pFilePath = Marshal.StringToHGlobalUni(filePath);
-
-                var fileInfo = new WINTRUST_FILE_INFO
-                {
-                    cbStruct = (uint)Marshal.SizeOf<WINTRUST_FILE_INFO>(),
-                    pcwszFilePath = pFilePath,
-                    hFile = IntPtr.Zero,
-                    pgKnownSubject = IntPtr.Zero
-                };
-
-                pFileInfo = Marshal.AllocHGlobal(Marshal.SizeOf<WINTRUST_FILE_INFO>());
-                Marshal.StructureToPtr(fileInfo, pFileInfo, false);
-
-                var trustData = new WINTRUST_DATA
-                {
-                    cbStruct = (uint)Marshal.SizeOf<WINTRUST_DATA>(),
-                    pPolicyCallbackData = IntPtr.Zero,
-                    pSIPClientData = IntPtr.Zero,
-                    dwUIChoice = WTD_UI_NONE,
-                    // Revoked code-signing certs (the standard response to cert theft) must not
-                    // pass the auto-allow gate. If revocation status can't be determined
-                    // (e.g. offline), the check fails and the user gets a prompt instead.
-                    fdwRevocationChecks = revocationChecks,
-                    dwUnionChoice = WTD_CHOICE_FILE,
-                    pUnion = pFileInfo,
-                    dwStateAction = WTD_STATEACTION_IGNORE,
-                    hWVTStateData = IntPtr.Zero,
-                    pwszURLReference = IntPtr.Zero,
-                    dwProvFlags = providerFlags,
-                    dwUIContext = 0,
-                    pSignatureSettings = IntPtr.Zero
-                };
-
-                pTrustData = Marshal.AllocHGlobal(Marshal.SizeOf<WINTRUST_DATA>());
-                Marshal.StructureToPtr(trustData, pTrustData, false);
-
-                pActionId = Marshal.AllocHGlobal(Marshal.SizeOf<Guid>());
-                Marshal.StructureToPtr(WINTRUST_ACTION_GENERIC_VERIFY_V2, pActionId, false);
-
-                int result = WinVerifyTrust(IntPtr.Zero, pActionId, pTrustData);
-
-                // No state retained with WTD_STATEACTION_IGNORE, so no close pass needed.
-                return result == 0; // ERROR_SUCCESS
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[ERROR] WinVerifyTrust failed for {filePath}: {ex.Message}");
-                return false;
-            }
-            finally
-            {
-                if (pFilePath != IntPtr.Zero)
-                {
-                    Marshal.FreeHGlobal(pFilePath);
-                }
-
-                if (pFileInfo != IntPtr.Zero)
-                {
-                    Marshal.FreeHGlobal(pFileInfo);
-                }
-
-                if (pTrustData != IntPtr.Zero)
-                {
-                    Marshal.FreeHGlobal(pTrustData);
-                }
-
-                if (pActionId != IntPtr.Zero)
-                {
-                    Marshal.FreeHGlobal(pActionId);
-                }
-            }
-        }
-
-        private static string? GetPublisherNameFromFileVersion(string filePath)
-        {
-            try
-            {
-                var info = FileVersionInfo.GetVersionInfo(filePath);
-                return string.IsNullOrEmpty(info.CompanyName) ? info.OriginalFilename : info.CompanyName;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-    }
-}    private static PublisherSignerIdentity? ResolveSignerIdentity(string filePath)
-        => ExtractSignerIdentity(filePath);
-
-    private static PublisherSignerIdentity? ExtractSignerIdentity(string filePath)
     {
+        publisherName = null;
+
+        var core = new SignatureValidationCore(
+            new WindowsWinTrustVerifier(),
+            ResolveSignerIdentity);
+
+        if (!core.VerifyTrust(filePath))
+        {
+            return false;
+        }
+
         try
         {
 #pragma warning disable SYSLIB0057
             using var basicCert = X509Certificate.CreateFromSignedFile(filePath);
             using var cert = new X509Certificate2(basicCert);
 #pragma warning restore SYSLIB0057
-
-            string? displayName = NormalizePublisherName(cert.Subject);
-            if (string.IsNullOrWhiteSpace(displayName))
-            {
-                return null;
-            }
-
-            string sha256Thumbprint = Convert.ToHexString(SHA256.HashData(cert.RawData));
-            return new PublisherSignerIdentity(displayName, cert.Subject, sha256Thumbprint);
+            publisherName = NormalizePublisherName(cert.Subject);
         }
         catch (CryptographicException)
         {
-            return null;
+            // Catalog-signed: no embedded cert. Preserve the existing PE metadata fallback.
+            publisherName = GetPublisherNameFromFileVersion(filePath);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            Debug.WriteLine($"[INFO] Strong signer extraction failed for {filePath}: {ex.Message}");
-            return null;
+            Debug.WriteLine($"[INFO] Signer extraction failed for {filePath}: {ex.Message}");
+            return false;
         }
+
+        return !string.IsNullOrEmpty(publisherName);
     }
 
 
