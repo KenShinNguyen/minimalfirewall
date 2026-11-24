@@ -677,7 +677,7 @@ namespace MinimalFirewall
             {
                 var psi = new ProcessStartInfo
                 {
-                    FileName = "auditpol.exe",
+                    FileName = ProcessHelper.GetWindowsSystemExecutablePath("auditpol.exe"),
                     Arguments = $"/set /subcategory:\"{WfpAuditSubcategoryGuid}\" /success:disable /failure:enable",
                     CreateNoWindow = true,
                     UseShellExecute = false,
@@ -699,7 +699,7 @@ namespace MinimalFirewall
             {
                 var psi = new ProcessStartInfo
                 {
-                    FileName = "auditpol.exe",
+                    FileName = ProcessHelper.GetWindowsSystemExecutablePath("auditpol.exe"),
                     Arguments = $"/set /subcategory:\"{WfpAuditSubcategoryGuid}\" /success:disable /failure:disable",
                     CreateNoWindow = true,
                     UseShellExecute = false,
