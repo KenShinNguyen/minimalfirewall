@@ -552,15 +552,17 @@ namespace MinimalFirewall
                 string? publisherName = null;
                 string? trustedPublisherName = null;
 
-                // Path 1: user-whitelisted publishers (gated by AutoAllowWhitelistedPublishers)
-                // Uses IsSignatureTrusted (not GetPublisherInfo) so that self-signed certs
-                // with spoofed CNs cannot bypass the whitelist.
+                // Path 1: explicit user whitelist. Match the SHA-256 fingerprint of the
+                // Authenticode signer certificate; display names and CNs are not identities.
                 if (checkWhitelist &&
-                    SignatureValidationService.IsSignatureTrusted(appPath, out publisherName) &&
-                    !string.IsNullOrEmpty(publisherName) &&
-                    _whitelistService.IsTrusted(publisherName))
+                    SignatureValidationService.TryGetTrustedSignerIdentity(appPath, out var signerIdentity)
+                    && signerIdentity != null)
                 {
-                    matchedPublisher = publisherName;
+                    publisherName = signerIdentity.DisplayName;
+                    if (_whitelistService.IsCertificateTrusted(signerIdentity.Sha256Thumbprint))
+                    {
+                        matchedPublisher = signerIdentity.DisplayName;
+                    }
                 }
 
                 // Path 2: OS-CA signature trust (gated by AutoAllowSystemSignedApps)
