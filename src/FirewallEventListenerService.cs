@@ -675,17 +675,7 @@ namespace MinimalFirewall
         {
             try
             {
-                var psi = new ProcessStartInfo
-                {
-                    FileName = ProcessHelper.GetWindowsSystemExecutablePath("auditpol.exe"),
-                    Arguments = $"/set /subcategory:\"{WfpAuditSubcategoryGuid}\" /success:disable /failure:enable",
-                    CreateNoWindow = true,
-                    UseShellExecute = false,
-                    WindowStyle = ProcessWindowStyle.Hidden
-
-                };
-                using var p = Process.Start(psi);
-                p?.WaitForExit(1000);
+                AdminTaskService.SetAuditPolicy(enable: true);
             }
             catch (Exception ex)
             {
@@ -697,21 +687,12 @@ namespace MinimalFirewall
         {
             try
             {
-                var psi = new ProcessStartInfo
-                {
-                    FileName = ProcessHelper.GetWindowsSystemExecutablePath("auditpol.exe"),
-                    Arguments = $"/set /subcategory:\"{WfpAuditSubcategoryGuid}\" /success:disable /failure:disable",
-                    CreateNoWindow = true,
-                    UseShellExecute = false,
-                    WindowStyle = ProcessWindowStyle.Hidden
-                };
-                using var p = Process.Start(psi);
-                p?.WaitForExit(1000);
-                _logAction($"[EventListener] Audit policy disabled (Cleaned up).");
+                AdminTaskService.SetAuditPolicy(enable: false);
+                _logAction("[EventListener] Original WFP audit policy restored.");
             }
             catch (Exception ex)
             {
-                _logAction($"[EventListener] Failed to clean up audit policy: {ex.Message}");
+                _logAction($"[EventListener] Failed to restore audit policy: {ex.Message}");
             }
         }
 
