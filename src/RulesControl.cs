@@ -434,7 +434,7 @@ namespace MinimalFirewall
                     if (!string.IsNullOrEmpty(appPath) && (File.Exists(appPath) || appPath.Contains("WindowsApps", StringComparison.OrdinalIgnoreCase) || appPath.Contains("SystemApps", StringComparison.OrdinalIgnoreCase)))
                     {
                         string safePath = appPath.Trim('\"');
-                        Process.Start("explorer.exe", $"/select, \"{safePath}\"");
+                        Process.Start(ProcessHelper.CreateExplorerSelectStartInfo(safePath));
                     }
                     else
                     {
