@@ -37,7 +37,7 @@ namespace MinimalFirewall
         private readonly FirewallDataService _dataService = dataService;
         private readonly IFirewallBackend _policyBackend = policyBackend ?? new WindowsFirewallBackend();
         private readonly ISystemFirewallRuleBackend _systemRuleBackend = systemRuleBackend ?? new WindowsSystemFirewallRuleBackend();
-        private readonly IFirewallRuleLifecycleBackend _ruleLifecycleBackend = ruleLifecycleBackend ?? new WindowsFirewallRuleLifecycleBackend(firewallService);
+        private readonly IFirewallRuleLifecycleBackend _ruleLifecycleBackend = ruleLifecycleBackend ?? new WindowsFirewallRuleLifecycleBackend();
         private readonly IFirewallRuleQueryBackend _ruleQueryBackend = ruleQueryBackend ?? new WindowsFirewallRuleQueryBackend();
         private readonly IFirewallRuleCreationBackend _ruleCreationBackend = ruleCreationBackend ?? new WindowsFirewallRuleCreationBackend();
 
