@@ -469,9 +469,9 @@ namespace MinimalFirewall
         // Thread-safe wrapper for MessageBox
         private static void SafeShowMessageBox(string text, string caption, MessageBoxButtons buttons, MessageBoxIcon icon)
         {
-            if (Application.OpenForms.Count > 0)
+            if (Application.OpenForms.Count > 0 &&
+                Application.OpenForms[0] is { } form)
             {
-                var form = Application.OpenForms[0];
                 if (form.InvokeRequired)
                 {
                     form.Invoke(new Action(() => MessageBox.Show(form, text, caption, buttons, icon)));
@@ -1356,11 +1356,12 @@ namespace MinimalFirewall
         {
             var advancedRules = await _dataService.GetAggregatedRulesAsync(CancellationToken.None);
             var portableAdvancedRules = advancedRules.SelectMany(ar => ar.UnderlyingRules ?? [])
-                .Select(static r =>
+                .OfType<AdvancedRuleViewModel>()
+                .Select(static rule =>
                 {
-                    _ = (r?.ApplicationName = PathResolver.ConvertToEnvironmentPath(r.ApplicationName));
-                    return r;
-                }).Where(r => r != null).ToList();
+                    rule.ApplicationName = PathResolver.ConvertToEnvironmentPath(rule.ApplicationName);
+                    return rule;
+                }).ToList();
             var wildcardRules = _wildcardRuleService.GetRules()
                 .Select(r =>
                 {

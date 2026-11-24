@@ -14,9 +14,9 @@ namespace MinimalFirewall
 
             foreach (var kvp in sortedList)
             {
-                if (grid.Columns.Contains(kvp.Key))
+                if (grid.Columns.Contains(kvp.Key) &&
+                    grid.Columns[kvp.Key] is { } col)
                 {
-                    var col = grid.Columns[kvp.Key];
                     if (kvp.Value.DisplayIndex >= 0 && kvp.Value.DisplayIndex < grid.Columns.Count)
                     {
                         col.DisplayIndex = kvp.Value.DisplayIndex;
