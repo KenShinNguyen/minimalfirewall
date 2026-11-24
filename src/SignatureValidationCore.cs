@@ -22,6 +22,21 @@ internal sealed class SignatureValidationCore
         _signerResolver = signerResolver ?? throw new ArgumentNullException(nameof(signerResolver));
     }
 
+    internal PublisherSignerIdentity? ValidateSigner(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+        {
+            return null;
+        }
+
+        if (!_verifier.Verify(filePath, revocationChecks: 1u, providerFlags: 0x40u))
+        {
+            return null;
+        }
+
+        return _signerResolver(filePath);
+    }
+
     internal bool IsSignatureTrusted(
         string filePath,
         IEnumerable<string> trustedEntries,
@@ -29,21 +44,7 @@ internal sealed class SignatureValidationCore
         out PublisherTrustMatchResult match)
     {
         match = new PublisherTrustMatchResult(PublisherTrustMatchKind.NoMatch, null);
-
-        if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
-        {
-            return false;
-        }
-
-        if (!_verifier.Verify(
-                filePath,
-                revocationChecks: 1u,
-                providerFlags: 0x40u))
-        {
-            return false;
-        }
-
-        PublisherSignerIdentity? signer = _signerResolver(filePath);
+        PublisherSignerIdentity? signer = ValidateSigner(filePath);
         if (signer is null)
         {
             return false;
@@ -52,11 +53,7 @@ internal sealed class SignatureValidationCore
         PublisherIdentity candidate = PublisherIdentity.FromSubjectName(
             new X500DistinguishedName(signer.Subject));
 
-        match = PublisherTrustMatcher.Evaluate(
-            candidate,
-            trustedEntries,
-            allowLegacyCnFallback);
-
+        match = PublisherTrustMatcher.Evaluate(candidate, trustedEntries, allowLegacyCnFallback);
         return match.IsTrusted;
     }
 }
