@@ -1,4 +1,5 @@
 using System;
+using MinimalFirewall.TypedObjects;
 using System.Collections.Generic;
 
 namespace MinimalFirewall;
@@ -33,4 +34,5 @@ public interface IFirewallRuleLifecycleBackend
     FirewallRuleLifecycleOperationResult DeleteAllMfwRules();
     FirewallRuleLifecycleOperationResult EnableByName(string ruleName);
     FirewallRuleLifecycleOperationResult DisableByName(string ruleName);
+    FirewallRuleLifecycleOperationResult DeleteConflictingServiceRules(string serviceName, Actions newAction, Directions newDirection);
 }

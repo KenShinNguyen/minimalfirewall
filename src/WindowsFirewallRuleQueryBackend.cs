@@ -1,4 +1,5 @@
 using System;
+using MinimalFirewall.TypedObjects;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using NetFwTypeLib;
@@ -77,6 +78,31 @@ public sealed class WindowsFirewallRuleQueryBackend : IFirewallRuleQueryBackend
             }, failures);
 
             return FirewallRuleQueryResult<int>.Success(enabledCount, failures);
+        });
+
+    public FirewallRuleQueryResult<IReadOnlyList<string>> GetRuleNamesByPathAndDirection(string appPath, Directions direction)
+        => Execute("query rule names by path and direction", () =>
+        {
+            if (string.IsNullOrEmpty(appPath))
+            {
+                return FirewallRuleQueryResult<IReadOnlyList<string>>.Success([]);
+            }
+
+            string normalizedAppPath = PathResolver.NormalizePath(appPath);
+            var names = new List<string>();
+            var failures = new List<FirewallRuleOperationFailure>();
+
+            ForEachRule(rule =>
+            {
+                if (!string.IsNullOrEmpty(rule.ApplicationName) &&
+                    string.Equals(PathResolver.NormalizePath(rule.ApplicationName), normalizedAppPath, StringComparison.OrdinalIgnoreCase) &&
+                    (int)rule.Direction == (int)direction)
+                {
+                    names.Add(rule.Name ?? string.Empty);
+                }
+            }, failures);
+
+            return FirewallRuleQueryResult<IReadOnlyList<string>>.Success(names, failures);
         });
 
     public FirewallRuleQueryResult<int> SetGroupEnabled(string groupName, bool isEnabled)

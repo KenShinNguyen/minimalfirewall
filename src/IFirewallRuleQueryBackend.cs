@@ -1,4 +1,5 @@
 using System;
+using MinimalFirewall.TypedObjects;
 using System.Collections.Generic;
 
 namespace MinimalFirewall;
@@ -69,6 +70,9 @@ public interface IFirewallRuleQueryBackend
     /// A rule that fails is reported in <c>RuleFailures</c> and the remaining rules are still processed.
     /// </summary>
     FirewallRuleQueryResult<int> SetGroupEnabled(string groupName, bool isEnabled);
+
+    /// <summary>Returns rule names matching an application path and direction without exposing COM types.</summary>
+    FirewallRuleQueryResult<IReadOnlyList<string>> GetRuleNamesByPathAndDirection(string appPath, Directions direction);
 }
 
 public static class MfwRuleGroups

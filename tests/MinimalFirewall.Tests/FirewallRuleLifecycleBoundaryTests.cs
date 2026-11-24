@@ -190,6 +190,11 @@ public sealed class FirewallRuleLifecycleBoundaryTests
             return Result();
         }
 
+        public FirewallRuleLifecycleOperationResult DeleteConflictingServiceRules(
+            string serviceName,
+            MinimalFirewall.TypedObjects.Actions newAction,
+            MinimalFirewall.TypedObjects.Directions newDirection) => Result();
+
         private FirewallRuleLifecycleOperationResult Result() =>
             Failure == null
                 ? FirewallRuleLifecycleOperationResult.Success()

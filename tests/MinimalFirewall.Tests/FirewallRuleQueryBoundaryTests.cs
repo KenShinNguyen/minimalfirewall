@@ -355,6 +355,9 @@ public sealed class FirewallRuleQueryBoundaryTests
         public FirewallRuleQueryResult<IReadOnlyList<FirewallRuleSnapshot>> GetAllRuleSnapshots()
             => FirewallRuleQueryResult<IReadOnlyList<FirewallRuleSnapshot>>.Success([]);
 
+        public FirewallRuleQueryResult<IReadOnlyList<string>> GetRuleNamesByPathAndDirection(string appPath, Directions direction)
+            => FirewallRuleQueryResult<IReadOnlyList<string>>.Success([]);
+
         public FirewallRuleQueryResult<IReadOnlyList<FirewallRuleSummary>> GetMfwRules()
         {
             QueryCalls++;
@@ -393,5 +396,6 @@ public sealed class FirewallRuleQueryBoundaryTests
         public FirewallRuleLifecycleOperationResult DeleteAllMfwRules() => Result;
         public FirewallRuleLifecycleOperationResult EnableByName(string ruleName) => Result;
         public FirewallRuleLifecycleOperationResult DisableByName(string ruleName) => Result;
+        public FirewallRuleLifecycleOperationResult DeleteConflictingServiceRules(string serviceName, Actions newAction, Directions newDirection) => Result;
     }
 }
