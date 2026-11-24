@@ -8,8 +8,6 @@ internal sealed record PublisherCertificateIdentity(
     internal string DisplayName =>
         SignatureValidationService.NormalizePublisherName(Subject) ?? Subject;
 
-    internal string DisplayNameWithFingerprint =>
-        $"{DisplayName} [SHA-256: {Sha256Thumbprint[..Math.Min(12, Sha256Thumbprint.Length)]}…]";
 }
 
 internal sealed record PublisherWhitelistEntry(
