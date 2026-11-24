@@ -11,34 +11,35 @@ namespace MinimalFirewall
 {
     public static partial class AdminTaskService
     {
-        public static void ResetFirewall()
+        public static void ResetFirewall() =>
+            ResetFirewall(new WindowsFirewallPolicyAdminBackend());
+
+        public static void ResetFirewall(IFirewallPolicyAdminBackend backend) =>
+            ResetFirewall(backend, (message, title, buttons, icon) => Messenger.MessageBox(message, title, buttons, icon));
+
+        public static void ResetFirewall(
+            IFirewallPolicyAdminBackend backend,
+            Action<string, string, MessageBoxButtons, MessageBoxIcon> showMessageBox)
         {
-            INetFwMgr? fwMgr = null;
-            try
+            ArgumentNullException.ThrowIfNull(backend);
+            ArgumentNullException.ThrowIfNull(showMessageBox);
+
+            var result = backend.ResetFirewall();
+            if (result.Succeeded)
             {
-                var fwMgrType = Type.GetTypeFromProgID("HNetCfg.FwMgr");
-                if (fwMgrType != null)
-                {
-                    fwMgr = (INetFwMgr?)Activator.CreateInstance(fwMgrType);
-                    if (fwMgr != null)
-                    {
-                        fwMgr.RestoreDefaults();
-                        Debug.WriteLine("[AdminTask] Firewall reset to defaults using COM interface.");
-                    }
-                }
+                return;
             }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[AdminTask ERROR] Firewall reset failed: {ex.Message}");
-                Messenger.MessageBox($"Could not reset Windows Firewall.\n\nError: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-            finally
-            {
-                if (fwMgr != null && Marshal.IsComObject(fwMgr))
-                {
-                    Marshal.ReleaseComObject(fwMgr);
-                }
-            }
+
+            string error = result.Exception?.Message
+                ?? result.Error
+                ?? "Unknown error.";
+
+            Debug.WriteLine($"[AdminTask ERROR] Firewall reset failed: {error}");
+            showMessageBox(
+                $"Could not reset Windows Firewall.\n\nError: {error}",
+                "Error",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
         }
 
         public static void SetAuditPolicy(bool enable)
