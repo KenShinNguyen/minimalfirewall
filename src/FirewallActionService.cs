@@ -1,4 +1,3 @@
-using NetFwTypeLib;
 using System.Data;
 using System.IO;
 using MinimalFirewall.TypedObjects;
@@ -201,11 +200,31 @@ namespace MinimalFirewall
                 {
                     if (action.Contains("Inbound") || action.Contains("(All)"))
                     {
-                        rulesToRemove.AddRange(FirewallRuleService.GetRuleNamesByPathAndDirection(appPath, NET_FW_RULE_DIRECTION_.NET_FW_RULE_DIR_IN));
+                        var inboundQuery = _ruleQueryBackend.GetRuleNamesByPathAndDirection(appPath, Directions.Incoming);
+                        if (inboundQuery.Succeeded && inboundQuery.Value is not null)
+                        {
+                            rulesToRemove.AddRange(inboundQuery.Value);
+                            LogRuleFailures(inboundQuery, "Get conflicting inbound application rules");
+                        }
+                        else
+                        {
+                            LogQueryFailure(inboundQuery, $"Get conflicting inbound application rules for {appPath} failed.");
+                            continue;
+                        }
                     }
                     if (action.Contains("Outbound") || action.Contains("(All)"))
                     {
-                        rulesToRemove.AddRange(FirewallRuleService.GetRuleNamesByPathAndDirection(appPath, NET_FW_RULE_DIRECTION_.NET_FW_RULE_DIR_OUT));
+                        var outboundQuery = _ruleQueryBackend.GetRuleNamesByPathAndDirection(appPath, Directions.Outgoing);
+                        if (outboundQuery.Succeeded && outboundQuery.Value is not null)
+                        {
+                            rulesToRemove.AddRange(outboundQuery.Value);
+                            LogRuleFailures(outboundQuery, "Get conflicting outbound application rules");
+                        }
+                        else
+                        {
+                            LogQueryFailure(outboundQuery, $"Get conflicting outbound application rules for {appPath} failed.");
+                            continue;
+                        }
                     }
                 }
 
@@ -275,11 +294,11 @@ namespace MinimalFirewall
             // DeleteConflictingServiceRules deletes the matched rules itself.
             if (parsedDirection.HasFlag(Directions.Incoming))
             {
-                FirewallRuleService.DeleteConflictingServiceRules(serviceName, (NET_FW_ACTION_)parsedAction, NET_FW_RULE_DIRECTION_.NET_FW_RULE_DIR_IN);
+                _ruleLifecycleBackend.DeleteConflictingServiceRules(serviceName, parsedAction, Directions.Incoming);
             }
             if (parsedDirection.HasFlag(Directions.Outgoing))
             {
-                FirewallRuleService.DeleteConflictingServiceRules(serviceName, (NET_FW_ACTION_)parsedAction, NET_FW_RULE_DIRECTION_.NET_FW_RULE_DIR_OUT);
+                _ruleLifecycleBackend.DeleteConflictingServiceRules(serviceName, parsedAction, Directions.Outgoing);
             }
 
             ProcessTcpAndUdpRules(parsedDirection, (dir, proto, suffix) =>
