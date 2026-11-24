@@ -14,9 +14,15 @@ namespace MinimalFirewall
         public static void ResetFirewall() =>
             ResetFirewall(new WindowsFirewallPolicyAdminBackend());
 
-        public static void ResetFirewall(IFirewallPolicyAdminBackend backend)
+        public static void ResetFirewall(IFirewallPolicyAdminBackend backend) =>
+            ResetFirewall(backend, Messenger.MessageBox);
+
+        public static void ResetFirewall(
+            IFirewallPolicyAdminBackend backend,
+            Action<string, string, MessageBoxButtons, MessageBoxIcon> showMessageBox)
         {
             ArgumentNullException.ThrowIfNull(backend);
+            ArgumentNullException.ThrowIfNull(showMessageBox);
 
             var result = backend.ResetFirewall();
             if (result.Succeeded)
@@ -29,8 +35,8 @@ namespace MinimalFirewall
                 ?? "Unknown error.";
 
             Debug.WriteLine($"[AdminTask ERROR] Firewall reset failed: {error}");
-            Messenger.MessageBox(
-                $"Could not reset Windows Firewall.\\n\\nError: {error}",
+            showMessageBox(
+                $"Could not reset Windows Firewall.\n\nError: {error}",
                 "Error",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error);
