@@ -559,7 +559,7 @@ namespace MinimalFirewall
                     && signerIdentity != null)
                 {
                     publisherName = signerIdentity.DisplayName;
-                    if (_whitelistService.IsTrusted(signerIdentity.Sha256Thumbprint))
+                    if (_whitelistService.IsCertificateTrusted(signerIdentity.Sha256Thumbprint))
                     {
                         matchedPublisher = signerIdentity.DisplayName;
                     }
