@@ -35,6 +35,35 @@ public sealed class FirewallRuleQueryBoundaryTests
     }
 
     [Fact]
+    public void AdvancedRuleViewModelMapping_AllProfileBitmask_MapsToAll()
+    {
+        var snapshot = new FirewallRuleSnapshot(
+            "All Profiles",
+            "",
+            true,
+            2,
+            false,
+            256,
+            "*",
+            "",
+            "*",
+            "*",
+            "*",
+            "*",
+            0x7FFFFFFF,
+            "",
+            "All",
+            "");
+
+        var viewModel = FirewallDataService.CreateAdvancedRuleViewModel(snapshot);
+
+        Assert.Equal("All", viewModel.Profiles);
+        Assert.Equal("Outgoing", viewModel.Direction.ToString());
+        Assert.Equal("Block", viewModel.Status);
+        Assert.Equal("Any", viewModel.ProtocolName);
+    }
+
+    [Fact]
     public void AdvancedRuleViewModelMapping_ConsumesComFreeSnapshot()
     {
         var snapshot = new FirewallRuleSnapshot(
