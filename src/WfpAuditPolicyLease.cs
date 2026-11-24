@@ -13,6 +13,7 @@ internal sealed class WfpAuditPolicyLease
 
     private const uint AuditSuccess = 0x00000001;
     private const uint AuditFailure = 0x00000002;
+    private const uint AuditNone = 0x00000004;
 
     private static readonly Guid[] Subcategories =
     [
@@ -69,7 +70,7 @@ internal sealed class WfpAuditPolicyLease
             {
                 new AuditPolicySetting(
                     PacketDropSubcategory,
-                    packetDropOriginal | AuditFailure),
+                    (packetDropOriginal & ~AuditNone) | AuditFailure),
                 new AuditPolicySetting(
                     ConnectionSubcategory,
                     (connectionOriginal & ~AuditSuccess) | AuditFailure)
