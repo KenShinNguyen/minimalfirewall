@@ -11,6 +11,7 @@ namespace MinimalFirewall
         private readonly string _changeLogFilePath;
 
         private readonly object _debugLock = new object();
+        private readonly IAppLogger? _appLogger;
         private readonly object _changeLock = new object();
 
         private static readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions
@@ -20,8 +21,9 @@ namespace MinimalFirewall
 
         public bool IsEnabled { get; set; }
 
-        public UserActivityLogger()
+        public UserActivityLogger(IAppLogger? appLogger = null)
         {
+            _appLogger = appLogger;
             _debugLogFilePath = ConfigPathManager.GetConfigPath("debug_log.txt");
             _changeLogFilePath = ConfigPathManager.GetConfigPath("changelog.json");
         }
@@ -79,6 +81,8 @@ namespace MinimalFirewall
                 return;
             }
 
+            _appLogger?.Debug(nameof(UserActivityLogger), message);
+
             string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
             string logEntry = $"[{timestamp}] {message}{Environment.NewLine}";
 
@@ -91,6 +95,9 @@ namespace MinimalFirewall
             {
                 return;
             }
+
+            string errorId = SafeAsyncRunner.CreateErrorId();
+            _appLogger?.Error(nameof(UserActivityLogger), context, ex, errorId);
 
             string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
             string hex = $"0x{ex.HResult:X8}";
