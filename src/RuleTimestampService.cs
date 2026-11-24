@@ -17,8 +17,14 @@ namespace MinimalFirewall
         private bool _isBaselineSession;
 
         public RuleTimestampService()
+            : this(ConfigPathManager.GetConfigPath("rule_timestamps.json"))
         {
-            _path = ConfigPathManager.GetConfigPath("rule_timestamps.json");
+        }
+
+        internal RuleTimestampService(string path)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(path);
+            _path = path;
             _isBaselineSession = !File.Exists(_path);
             Load();
         }
