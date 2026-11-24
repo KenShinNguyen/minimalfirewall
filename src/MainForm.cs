@@ -137,7 +137,13 @@ namespace MinimalFirewall
             _ruleTimestampService = new RuleTimestampService();
 
             var uwpService = new UwpService(_firewallRuleService);
-            _dataService = new FirewallDataService(_firewallRuleService, _wildcardRuleService, uwpService, _ruleTimestampService);
+            var ruleQueryBackend = new WindowsFirewallRuleQueryBackend();
+            _dataService = new FirewallDataService(
+                _firewallRuleService,
+                _wildcardRuleService,
+                uwpService,
+                _ruleTimestampService,
+                ruleQueryBackend);
             _firewallSentryService = new FirewallSentryService(_firewallRuleService);
             var trafficMonitorViewModel = new TrafficMonitorViewModel();
 
