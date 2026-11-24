@@ -88,6 +88,18 @@ namespace MinimalFirewall
             }
         }
 
+        private static bool IsMfwRule(string? grouping)
+        {
+            if (string.IsNullOrEmpty(grouping))
+            {
+                return false;
+            }
+
+            return grouping.EndsWith(MFWConstants.MfwRuleSuffix) ||
+                   grouping == MFWConstants.MainRuleGroup ||
+                   grouping == MFWConstants.WildcardRuleGroup;
+        }
+
         private void OnFirewallRuleChangeEvent(object sender, EventArrivedEventArgs e)
         {
             try
