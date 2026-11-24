@@ -10,12 +10,10 @@ public sealed class TemporaryAndWildcardRuleBehaviorTests
         using var storage = new TemporaryRuleTestStorage();
         var expiry = DateTime.UtcNow.AddMinutes(-1);
 
-        using (var manager = storage.CreateManager())
-        {
-            manager.Add("Demo Rule", expiry);
-        }
+        var manager = storage.CreateManager();
+        manager.Add("Demo Rule", expiry);
 
-        using var reloaded = storage.CreateManager();
+        var reloaded = storage.CreateManager();
 
         var expired = reloaded.GetExpiredRules();
         Assert.Equal(expiry, expired["Demo Rule"]);
@@ -25,7 +23,7 @@ public sealed class TemporaryAndWildcardRuleBehaviorTests
     public void TemporaryRuleManager_GetExpiredRulesReturnsOnlyExpiredRules()
     {
         using var storage = new TemporaryRuleTestStorage();
-        using var manager = storage.CreateManager();
+        var manager = storage.CreateManager();
 
         manager.Add("Expired", DateTime.UtcNow.AddMinutes(-1));
         manager.Add("Active", DateTime.UtcNow.AddMinutes(10));
@@ -40,13 +38,11 @@ public sealed class TemporaryAndWildcardRuleBehaviorTests
     public void TemporaryRuleManager_RemovePersistsDeletion()
     {
         using var storage = new TemporaryRuleTestStorage();
-        using (var manager = storage.CreateManager())
-        {
-            manager.Add("Demo Rule", DateTime.UtcNow.AddHours(1));
-            manager.Remove("demo rule");
-        }
+        var manager = storage.CreateManager();
+        manager.Add("Demo Rule", DateTime.UtcNow.AddHours(1));
+        manager.Remove("demo rule");
 
-        using var reloaded = storage.CreateManager();
+        var reloaded = storage.CreateManager();
         Assert.Empty(reloaded.GetExpiredRules());
     }
 
