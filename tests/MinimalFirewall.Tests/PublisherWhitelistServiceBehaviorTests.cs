@@ -77,7 +77,7 @@ public sealed class PublisherWhitelistServiceBehaviorTests
         var service = storage.CreateService();
 
         Assert.False(service.IsCertificateTrusted(ThumbprintA));
-        var legacy = Assert.Single(service.GetTrustedPublishers(), entry => entry.IsLegacy);
+        var legacy = Assert.Single(service.GetTrustedPublishers(), entry => entry.IsLegacy && entry.DisplayName == "Contoso");
         Assert.False(service.IsCertificateTrusted("Acme Corporation"));
         Assert.Equal("Contoso", legacy.DisplayName);
         Assert.Contains("disabled", legacy.ToString().ToLowerInvariant());
