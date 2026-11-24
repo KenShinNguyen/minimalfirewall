@@ -13,6 +13,8 @@
             <Sources>
               <Exclude>
                 <Source>.*\.Designer\.cs$</Source>
+                <!-- Exclude compiler/source-generator output under obj; keep maintained UI and backend source measurable. -->
+                <Source>.*[\\/]obj[\\/].*</Source>
               </Exclude>
             </Sources>
           </CodeCoverage>
