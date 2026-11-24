@@ -3,6 +3,7 @@ using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
 using MinimalFirewall.Tests.Fakes;
+using MinimalFirewall.TypedObjects;
 using Xunit;
 
 namespace MinimalFirewall.Tests;
