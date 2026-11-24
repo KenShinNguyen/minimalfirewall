@@ -135,15 +135,14 @@ namespace MinimalFirewall
             _wildcardRuleService = new WildcardRuleService();
             _ruleTimestampService = new RuleTimestampService();
 
-            var uwpService = new UwpService(_firewallRuleService);
+            var uwpService = new UwpService();
             var ruleQueryBackend = new WindowsFirewallRuleQueryBackend();
             _dataService = new FirewallDataService(
-                _firewallRuleService,
                 _wildcardRuleService,
                 uwpService,
                 _ruleTimestampService,
                 ruleQueryBackend);
-            _firewallSentryService = new FirewallSentryService(_firewallRuleService);
+            _firewallSentryService = new FirewallSentryService();
             var trafficMonitorViewModel = new TrafficMonitorViewModel();
 
             // Fail closed on an unreadable policy: if the lockdown state cannot be determined we
@@ -152,7 +151,7 @@ namespace MinimalFirewall
             _eventListenerService = new FirewallEventListenerService(_dataService, _wildcardRuleService, () => MainViewModel.LockdownState != FirewallPolicyState.Allow, msg => _activityLogger.LogDebug(msg), _appSettings, _whitelistService);
             _eventListenerService.StartupFailed += OnEventListenerStartupFailed;
 
-            _actionsService = new FirewallActionsService(_firewallRuleService, _activityLogger, _eventListenerService, _firewallSentryService, _whitelistService, _wildcardRuleService, _dataService);
+            _actionsService = new FirewallActionsService(_activityLogger, _eventListenerService, _firewallSentryService, _whitelistService, _wildcardRuleService, _dataService);
             _eventListenerService.ActionsService = _actionsService;
 
             _backgroundTaskService = new BackgroundFirewallTaskService(_actionsService, _activityLogger, _wildcardRuleService, _dataService);

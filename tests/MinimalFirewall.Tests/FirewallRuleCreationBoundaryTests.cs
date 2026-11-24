@@ -174,7 +174,6 @@ public sealed class FirewallRuleCreationBoundaryTests
 
     private static FirewallActionsService CreateService(IFirewallRuleCreationBackend backend) =>
         new(
-            null!,
             new UserActivityLogger(),
             null!,
             null!,
@@ -205,7 +204,6 @@ public sealed class FirewallRuleCreationBoundaryTests
 
         public TestableFirewallActionsService(IFirewallRuleCreationBackend backend)
             : base(
-                null!,
                 new UserActivityLogger(),
                 null!,
                 null!,

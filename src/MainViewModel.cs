@@ -94,9 +94,11 @@ namespace MinimalFirewall
         /// Tri-state lockdown status. <see cref="FirewallPolicyState.Unknown"/> means the policy
         /// could not be read at all - it is not the same as "not locked down".
         /// </summary>
-        public static FirewallPolicyState LockdownState => FirewallRuleService.GetDefaultOutboundState();
+        private static readonly IFirewallBackend _policyBackend = new WindowsFirewallBackend();
 
-        public static bool IsLockedDown => FirewallRuleService.GetDefaultOutboundState() == FirewallPolicyState.Block;
+        public static FirewallPolicyState LockdownState => _policyBackend.GetDefaultOutboundState();
+
+        public static bool IsLockedDown => _policyBackend.GetDefaultOutboundState() == FirewallPolicyState.Block;
 
 
         public void ClearRulesCache()

@@ -4,19 +4,16 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using NetFwTypeLib;
 
 namespace MinimalFirewall
 {
     public class UwpService
     {
         private readonly string _cachePath;
-        private readonly FirewallRuleService _firewallRuleService;
         private static readonly SemaphoreSlim _cacheLock = new SemaphoreSlim(1, 1);
 
         // Matches "@{PackageFamilyName?ms-resource" or "@{PackageFamilyName}"
@@ -24,10 +21,9 @@ namespace MinimalFirewall
             @"^@\{(?<pfn>[^?}]+)(\?ms-resource|\})",
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
-        public UwpService(FirewallRuleService firewallRuleService)
+        public UwpService()
         {
             _cachePath = ConfigPathManager.GetConfigPath("uwp_apps.json");
-            _firewallRuleService = firewallRuleService;
         }
 
         public async Task<List<UwpApp>> GetUwpAppsAsync(CancellationToken token)

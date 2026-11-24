@@ -12,11 +12,10 @@ namespace MinimalFirewall
 {
     public enum MfwRuleStatus { None, MfwAllow, MfwBlock }
 
-    public class FirewallDataService(FirewallRuleService firewallRuleService, WildcardRuleService wildcardRuleService, UwpService uwpService, RuleTimestampService ruleTimestampService, IFirewallRuleQueryBackend ruleQueryBackend)
+    public class FirewallDataService(WildcardRuleService wildcardRuleService, UwpService uwpService, RuleTimestampService ruleTimestampService, IFirewallRuleQueryBackend ruleQueryBackend)
     {
         [System.Runtime.InteropServices.DllImport("shlwapi.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, ExactSpelling = true)]
         private static extern int SHLoadIndirectString(string pszSource, System.Text.StringBuilder pszOutBuf, uint cchOutBuf, IntPtr ppvReserved);
-        private readonly FirewallRuleService _firewallRuleService = firewallRuleService;
         private readonly WildcardRuleService _wildcardRuleService = wildcardRuleService;
         private readonly UwpService _uwpService = uwpService;
         private readonly RuleTimestampService _ruleTimestampService = ruleTimestampService;

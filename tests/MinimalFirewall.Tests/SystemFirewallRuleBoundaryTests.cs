@@ -95,7 +95,7 @@ public sealed class SystemFirewallRuleBoundaryTests
 
     private sealed class TestableFirewallActionsService(ISystemFirewallRuleBackend systemBackend)
         : FirewallActionsService(
-            null!, new UserActivityLogger(), null!, null!, null!, null!, null!,
+            new UserActivityLogger(), null!, null!, null!, null!, null!,
             new FakeFirewallBackend(FirewallPolicyState.Allow), systemBackend)
     {
         public bool CallManageSystemRule(string ruleName, string description, string applicationName,
@@ -108,7 +108,7 @@ public sealed class SystemFirewallRuleBoundaryTests
     private sealed class FailingPreparationFirewallActionsService(
         IFirewallBackend policyBackend, ISystemFirewallRuleBackend systemBackend)
         : FirewallActionsService(
-            null!, new UserActivityLogger(), null!, null!, null!, null!, null!,
+            new UserActivityLogger(), null!, null!, null!, null!, null!,
             policyBackend, systemBackend)
     {
         public int PrepareCalls { get; private set; }

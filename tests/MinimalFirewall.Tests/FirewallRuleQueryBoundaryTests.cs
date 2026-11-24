@@ -320,8 +320,7 @@ public sealed class FirewallRuleQueryBoundaryTests
         IFirewallRuleLifecycleBackend lifecycle,
         IFirewallRuleQueryBackend query)
         => new(
-            null!,
-            logger,
+                        logger,
             null!,
             null!,
             null!,

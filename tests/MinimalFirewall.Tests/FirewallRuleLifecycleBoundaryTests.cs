@@ -122,8 +122,7 @@ public sealed class FirewallRuleLifecycleBoundaryTests
 
     private static FirewallActionsService CreateService(FakeLifecycleBackend backend)
         => new(
-            null!,
-            new UserActivityLogger(),
+                        new UserActivityLogger(),
             null!,
             null!,
             null!,

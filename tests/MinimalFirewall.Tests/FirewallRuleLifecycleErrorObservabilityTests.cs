@@ -85,8 +85,7 @@ public sealed class FirewallRuleLifecycleErrorObservabilityTests
 
     private static FirewallActionsService CreateService(UserActivityLogger logger, IFirewallRuleLifecycleBackend backend)
         => new(
-            null!,
-            logger,
+                        logger,
             null!,
             null!,
             null!,
