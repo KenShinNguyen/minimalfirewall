@@ -44,7 +44,6 @@ namespace MinimalFirewall
 
         private readonly Queue<FirewallRuleChange> _rulePopupQueue = new();
         private volatile bool _isRulePopupVisible = false;
-        private System.Threading.Timer? _autoRefreshTimer;
         private readonly Dictionary<string, System.Threading.Timer> _tabUnloadTimers = [];
         private Image? _lockedGreenIcon;
         private Image? _unlockedWhiteIcon;
@@ -57,6 +56,7 @@ namespace MinimalFirewall
         private bool _isSentryServiceStarted = false;
         private readonly bool _startMinimized;
         private TrayIconController? _trayIconController;
+        private WindowLifecycleController? _windowLifecycleController;
         private StatusForm? _auditStatusForm = null;
         private CancellationTokenSource? _scanCts = null;
         private System.Windows.Forms.Timer? _trayBlinkTimer;
@@ -96,6 +96,13 @@ namespace MinimalFirewall
             
 
             InitializeServices();
+
+            _windowLifecycleController = new WindowLifecycleController(
+                this,
+                _appSettings,
+                _activityLogger,
+                () => mainTabControl.SelectedTab?.Name is "rulesTabPage",
+                () => ForceDataRefreshAsync());
 
             // Event Subscriptions
             _backgroundTaskService.QueueCountChanged += OnQueueCountChanged;
@@ -898,62 +905,10 @@ namespace MinimalFirewall
         }
 
         private void SetupAutoRefreshTimer()
-        {
-            _autoRefreshTimer?.Dispose();
-            if (_appSettings.AutoRefreshIntervalMinutes > 0)
-            {
-                var interval = TimeSpan.FromMinutes(_appSettings.AutoRefreshIntervalMinutes);
-                _autoRefreshTimer = new System.Threading.Timer(_ =>
-                {
-                    if (IsDisposed || !IsHandleCreated)
-                    {
-                        return;
-                    }
-
-                    try
-                    {
-                        Invoke(new Action(async () =>
-                        {
-                            if (Visible && (mainTabControl.SelectedTab?.Name is "rulesTabPage"))
-                            {
-                                await ForceDataRefreshAsync();
-                            }
-                        }));
-                    }
-                    catch (ObjectDisposedException)
-                    {
-                    }
-                }, null, interval, interval);
-                _activityLogger.LogDebug($"Auto-refresh timer set to {_appSettings.AutoRefreshIntervalMinutes} minutes.");
-            }
-        }
+            => _windowLifecycleController?.SetupAutoRefreshTimer();
 
         private void ApplyLastWindowState()
-        {
-            if (_appSettings.WindowSize.Width > 0 && _appSettings.WindowSize.Height > 0)
-            {
-                Size = _appSettings.WindowSize;
-            }
-
-            bool isVisible = Screen.AllScreens.Any(screen => screen.WorkingArea.Contains(_appSettings.WindowLocation));
-
-            if (isVisible)
-            {
-                Location = _appSettings.WindowLocation;
-            }
-            else
-            {
-                StartPosition = FormStartPosition.CenterScreen;
-            }
-
-            var savedState = (FormWindowState)_appSettings.WindowState;
-            if (savedState == FormWindowState.Minimized)
-            {
-                savedState = FormWindowState.Normal;
-            }
-
-            WindowState = savedState;
-        }
+            => _windowLifecycleController?.ApplyLastWindowState();
 
         private async void ShowWindow(object? sender, EventArgs e)
         {
@@ -984,19 +939,16 @@ namespace MinimalFirewall
 
         private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
         {
-            bool isNormal = WindowState == FormWindowState.Normal;
-            _appSettings.WindowLocation = isNormal ? Location : RestoreBounds.Location;
-            _appSettings.WindowSize = isNormal ? Size : RestoreBounds.Size;
-            _appSettings.WindowState = WindowState == FormWindowState.Maximized ? (int)FormWindowState.Maximized : (int)FormWindowState.Normal;
+            _windowLifecycleController?.SaveWindowState();
 
             settingsControl1.SaveSettingsFromUI();
-            bool isExiting = !(_appSettings.CloseToTray && e.CloseReason == CloseReason.UserClosing);
+            bool isExiting = !(_windowLifecycleController?.ShouldExit(e.CloseReason) ?? true);
 
             if (!isExiting)
             {
                 e.Cancel = true;
                 Hide();
-                notifyIcon?.Visible = true;
+                _trayIconController?.SetVisible(true);
                 _ = PrepareForTrayAsync();
             }
             else
@@ -1030,7 +982,7 @@ namespace MinimalFirewall
             _scanCts?.Cancel();
             _firewallSentryService.Stop();
             _mainViewModel.TrafficMonitorViewModel.StopMonitoring();
-            _autoRefreshTimer?.Dispose();
+            _windowLifecycleController?.StopAutoRefreshTimer();
 
             _mainViewModel.ClearRulesData();
             _mainViewModel.PendingConnections.Clear();
