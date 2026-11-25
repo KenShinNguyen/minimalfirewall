@@ -114,14 +114,14 @@ namespace MinimalFirewall
                 _form.StartPosition = FormStartPosition.CenterScreen;
             }
 
-            var savedState = (FormWindowState)_appSettings.WindowState;
-            if (savedState == FormWindowState.Minimized)
-            {
-                savedState = FormWindowState.Normal;
-            }
-
+            var savedState = NormalizeSavedWindowState((FormWindowState)_appSettings.WindowState);
             _form.WindowState = savedState;
         }
+
+        internal static FormWindowState NormalizeSavedWindowState(FormWindowState savedState)
+            => savedState == FormWindowState.Minimized
+                ? FormWindowState.Normal
+                : savedState;
 
         public void Dispose()
         {
