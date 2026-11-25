@@ -179,9 +179,17 @@ namespace MinimalFirewall
             var normalizedAppPaths = appPaths.Select(PathResolver.NormalizePath).Where(p => !string.IsNullOrEmpty(p)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             if (action.StartsWith("Allow", StringComparison.OrdinalIgnoreCase))
             {
-                foreach (var appPath in normalizedAppPaths)
+                try
                 {
-                    FindAndQueueDeleteForGeneralBlockRule(appPath);
+                    foreach (var appPath in normalizedAppPaths)
+                    {
+                        FindAndQueueDeleteForGeneralBlockRule(appPath);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    activityLogger.LogException("ApplyApplicationRuleChange preflight query failed.", ex);
+                    return;
                 }
             }
 
@@ -194,7 +202,9 @@ namespace MinimalFirewall
                 }
 
                 var rulesToRemove = new List<string>();
-                if (string.IsNullOrEmpty(wildcardSourcePath))
+                try
+                {
+                    if (string.IsNullOrEmpty(wildcardSourcePath))
                 {
                     if (action.Contains("Inbound") || action.Contains("(All)"))
                     {
@@ -222,6 +232,12 @@ namespace MinimalFirewall
                             LogQueryFailure(outboundQuery, $"Get conflicting outbound application rules for {appPath} failed.");
                         }
                     }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    activityLogger.LogException($"ApplyApplicationRuleChange query failed for '{appPath}'.", ex);
+                    return;
                 }
 
                 if (rulesToRemove.Count != 0)

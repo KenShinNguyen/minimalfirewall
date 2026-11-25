@@ -24,7 +24,7 @@ namespace MinimalFirewall
             public uint dwUIChoice;
             public uint fdwRevocationChecks;
             public uint dwUnionChoice;
-            public IntPtr pUnion;       // Union of pFile/pCatalog/pBlob — one IntPtr
+            public IntPtr pUnion;
             public uint dwStateAction;
             public IntPtr hWVTStateData;
             public IntPtr pwszURLReference;
@@ -42,11 +42,11 @@ namespace MinimalFirewall
             public IntPtr pgKnownSubject;
         }
 
-        private const int WTD_UI_NONE = 2;
-        private const int WTD_REVOKE_WHOLECHAIN = 1;
-        private const int WTD_CHOICE_FILE = 1;
-        private const int WTD_STATEACTION_IGNORE = 0;
-        private const int WTD_REVOCATION_CHECK_CHAIN = 0x40;
+        private const uint WTD_UI_NONE = 2;
+        private const uint WTD_REVOKE_WHOLECHAIN = 1;
+        private const uint WTD_CHOICE_FILE = 1;
+        private const uint WTD_STATEACTION_IGNORE = 0;
+        private const uint WTD_REVOCATION_CHECK_CHAIN = 0x40;
 
         public static bool GetPublisherInfo(string filePath, out string? publisherName)
             => IsSignatureTrusted(filePath, out publisherName);
@@ -68,58 +68,26 @@ namespace MinimalFirewall
                 return false;
             }
 
-            try
-            {
-#pragma warning disable SYSLIB0057 // CreateFromSignedFile has no direct replacement for Authenticode signer extraction
-                using var basicCert = X509Certificate.CreateFromSignedFile(filePath);
-                using var cert = new X509Certificate2(basicCert);
-#pragma warning restore SYSLIB0057
-
-                string? displayName = NormalizePublisherName(cert.Subject);
-                if (string.IsNullOrWhiteSpace(displayName))
-                {
-                    return false;
-                }
-
-                string sha256Thumbprint = Convert.ToHexString(SHA256.HashData(cert.RawData));
-                signerIdentity = new PublisherSignerIdentity(displayName, cert.Subject, sha256Thumbprint);
-                return true;
-            }
-            catch (CryptographicException)
-            {
-                // Catalog-signed binaries do not expose an embedded signer certificate through
-                // CreateFromSignedFile. Do not fall back to PE CompanyName for allowlisting.
-                return false;
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
-            {
-                Debug.WriteLine($"[INFO] Strong signer extraction failed for {filePath}: {ex.Message}");
-                return false;
-            }
+            signerIdentity = ExtractSignerIdentity(filePath);
+            return signerIdentity is not null;
         }
 
         public static bool IsSignatureTrusted(string filePath, out string? publisherName)
         {
             publisherName = null;
 
-            if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
+            var core = new SignatureValidationCore(
+                new WindowsWinTrustVerifier(),
+                ResolveSignerIdentity);
+
+            if (!core.VerifyTrust(filePath))
             {
                 return false;
             }
 
-            // Gate on Authenticode digest verification. WinVerifyTrust validates that the
-            // file's hash matches its embedded or catalog signature AND that the signer
-            // chains to a trusted root. Without this gate, a tampered file would still
-            // expose its original signer's CN via CreateFromSignedFile.
-            if (!VerifyWithWinTrust(filePath))
-            {
-                return false;
-            }
-
-            // File integrity verified. Extract publisher name for display/whitelist matching.
             try
             {
-#pragma warning disable SYSLIB0057 // CreateFromSignedFile has no direct replacement for Authenticode signer extraction
+#pragma warning disable SYSLIB0057
                 using var basicCert = X509Certificate.CreateFromSignedFile(filePath);
                 using var cert = new X509Certificate2(basicCert);
 #pragma warning restore SYSLIB0057
@@ -127,7 +95,7 @@ namespace MinimalFirewall
             }
             catch (CryptographicException)
             {
-                // Catalog-signed: no embedded cert. Fall back to PE metadata.
+                // Catalog-signed: no embedded cert. Preserve the existing PE metadata fallback.
                 publisherName = GetPublisherNameFromFileVersion(filePath);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -137,6 +105,46 @@ namespace MinimalFirewall
             }
 
             return !string.IsNullOrEmpty(publisherName);
+        }
+
+        internal static PublisherSignerIdentity? ResolveSignerIdentity(string filePath)
+            => ExtractSignerIdentity(filePath);
+
+        internal static bool VerifyWithWinTrustForSeam(
+            string filePath,
+            uint revocationChecks,
+            uint providerFlags)
+            => VerifyWithWinTrust(filePath, revocationChecks, providerFlags);
+
+        private static PublisherSignerIdentity? ExtractSignerIdentity(string filePath)
+        {
+            try
+            {
+#pragma warning disable SYSLIB0057
+                using var basicCert = X509Certificate.CreateFromSignedFile(filePath);
+                using var cert = new X509Certificate2(basicCert);
+#pragma warning restore SYSLIB0057
+
+                string? displayName = NormalizePublisherName(cert.Subject);
+                if (string.IsNullOrWhiteSpace(displayName))
+                {
+                    return null;
+                }
+
+                string sha256Thumbprint = Convert.ToHexString(SHA256.HashData(cert.RawData));
+                return new PublisherSignerIdentity(displayName, cert.Subject, sha256Thumbprint);
+            }
+            catch (CryptographicException)
+            {
+                // Catalog-signed binaries do not expose an embedded signer certificate through
+                // CreateFromSignedFile. Do not fall back to PE CompanyName for allowlisting.
+                return null;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                Debug.WriteLine($"[INFO] Strong signer extraction failed for {filePath}: {ex.Message}");
+                return null;
+            }
         }
 
         private static string? NormalizePublisherName(string? subject)
@@ -163,6 +171,12 @@ namespace MinimalFirewall
         }
 
         private static bool VerifyWithWinTrust(string filePath)
+            => VerifyWithWinTrust(filePath, WTD_REVOKE_WHOLECHAIN, WTD_REVOCATION_CHECK_CHAIN);
+
+        private static bool VerifyWithWinTrust(
+            string filePath,
+            uint revocationChecks,
+            uint providerFlags)
         {
             IntPtr pFilePath = IntPtr.Zero;
             IntPtr pFileInfo = IntPtr.Zero;
@@ -190,16 +204,13 @@ namespace MinimalFirewall
                     pPolicyCallbackData = IntPtr.Zero,
                     pSIPClientData = IntPtr.Zero,
                     dwUIChoice = WTD_UI_NONE,
-                    // Revoked code-signing certs (the standard response to cert theft) must not
-                    // pass the auto-allow gate. If revocation status can't be determined
-                    // (e.g. offline), the check fails and the user gets a prompt instead.
-                    fdwRevocationChecks = WTD_REVOKE_WHOLECHAIN,
+                    fdwRevocationChecks = revocationChecks,
                     dwUnionChoice = WTD_CHOICE_FILE,
                     pUnion = pFileInfo,
                     dwStateAction = WTD_STATEACTION_IGNORE,
                     hWVTStateData = IntPtr.Zero,
                     pwszURLReference = IntPtr.Zero,
-                    dwProvFlags = WTD_REVOCATION_CHECK_CHAIN,
+                    dwProvFlags = providerFlags,
                     dwUIContext = 0,
                     pSignatureSettings = IntPtr.Zero
                 };
@@ -211,9 +222,7 @@ namespace MinimalFirewall
                 Marshal.StructureToPtr(WINTRUST_ACTION_GENERIC_VERIFY_V2, pActionId, false);
 
                 int result = WinVerifyTrust(IntPtr.Zero, pActionId, pTrustData);
-
-                // No state retained with WTD_STATEACTION_IGNORE, so no close pass needed.
-                return result == 0; // ERROR_SUCCESS
+                return result == 0;
             }
             catch (Exception ex)
             {
