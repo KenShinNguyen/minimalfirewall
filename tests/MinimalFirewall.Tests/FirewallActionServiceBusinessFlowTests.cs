@@ -104,6 +104,7 @@ public sealed class FirewallActionServiceBusinessFlowTests
             new AdvancedRuleViewModel
             {
                 Name = "Allow Client",
+                Status = "Allow",
                 IsEnabled = true,
                 Direction = Directions.Outgoing,
                 Protocol = 6,
