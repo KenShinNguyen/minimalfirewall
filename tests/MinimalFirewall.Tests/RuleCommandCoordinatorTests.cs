@@ -56,8 +56,11 @@ public sealed class RuleCommandCoordinatorTests
         await backgroundTasks.WhenIdleAsync();
 
         Assert.Contains(
-            scope.Backend.Operations,
-            operation => operation.Contains("ApplyApplicationRule", StringComparison.Ordinal));
+            scope.Backend.Rules,
+            rule => string.Equals(
+                rule.ApplicationName,
+                @"C:\Apps\coordinator-test.exe",
+                StringComparison.OrdinalIgnoreCase));
     }
 
     private sealed class RuleCommandCoordinatorTestScope : IDisposable
