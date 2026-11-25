@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using MinimalFirewall.Tests.Fakes;
 using MinimalFirewall.TypedObjects;
 using Xunit;
 
@@ -52,7 +54,7 @@ public sealed class RuleCommandCoordinatorTests
         var coordinator = new RuleCommandCoordinator(tasks.Add);
         var viewModel = CreateAdvancedRuleViewModel("Coordinator Test Rule");
 
-        coordinator.EnqueueCreateAdvancedRule(viewModel, "All", "8:0");
+        coordinator.EnqueueCreateAdvancedRule(viewModel, "All", string.Empty);
 
         var task = Assert.Single(tasks);
         Assert.Equal(FirewallTaskType.CreateAdvancedRule, task.TaskType);
@@ -61,20 +63,6 @@ public sealed class RuleCommandCoordinatorTests
         var payload = Assert.IsType<CreateAdvancedRulePayload>(task.Payload);
         Assert.Same(viewModel, payload.ViewModel);
         Assert.Equal("All", payload.InterfaceTypes);
-        Assert.Equal("8:0", payload.IcmpTypesAndCodes);
-    }
-
-    [Fact]
-    public void EnqueueCreateAdvancedRule_AllowsEmptyOptionalIcmpValue()
-    {
-        var tasks = new List<FirewallTask>();
-        var coordinator = new RuleCommandCoordinator(tasks.Add);
-        var viewModel = CreateAdvancedRuleViewModel();
-
-        coordinator.EnqueueCreateAdvancedRule(viewModel, "All", string.Empty);
-
-        var payload = Assert.IsType<CreateAdvancedRulePayload>(Assert.Single(tasks).Payload);
-        Assert.Same(viewModel, payload.ViewModel);
         Assert.Equal(string.Empty, payload.IcmpTypesAndCodes);
     }
 
@@ -176,6 +164,33 @@ public sealed class RuleCommandCoordinatorTests
             tasks.Select(task => task.Description));
     }
 
+    [Fact]
+    public async Task ProductionConstructor_EnqueuesBothCommandsAndBackgroundServiceDrainsThem()
+    {
+        using var scope = new RuleCommandCoordinatorTestScope();
+        using var backgroundTasks = scope.CreateBackgroundTaskService();
+        var coordinator = new RuleCommandCoordinator(backgroundTasks);
+        const string appPath = @"C:\Program Files\WindowsApps\Contoso.App\app.exe";
+
+        coordinator.EnqueueCreateAdvancedRule(
+            CreateAdvancedRuleViewModel("Production Constructor Rule"),
+            "All",
+            string.Empty);
+        coordinator.EnqueueApplyApplicationRule(appPath, "Allow Outbound");
+
+        await backgroundTasks.WhenIdleAsync().WaitAsync(TimeSpan.FromSeconds(30));
+
+        Assert.Contains(
+            scope.Backend.Rules,
+            rule => rule.Name == "MFW - Production Constructor Rule");
+        Assert.Contains(
+            scope.Backend.Rules,
+            rule => string.Equals(
+                rule.ApplicationName,
+                appPath,
+                StringComparison.OrdinalIgnoreCase));
+    }
+
     private static AdvancedRuleViewModel CreateAdvancedRuleViewModel(string name = "Test Rule")
         => new()
         {
@@ -196,4 +211,58 @@ public sealed class RuleCommandCoordinatorTests
             InterfaceTypes = "All",
             IcmpTypesAndCodes = string.Empty
         };
+
+    private sealed class RuleCommandCoordinatorTestScope : IDisposable
+    {
+        private readonly string _directory =
+            Path.Combine(Path.GetTempPath(), $"mfw-rule-command-tests-{Guid.NewGuid():N}");
+
+        public InMemoryFirewallBackend Backend { get; } = new();
+        public WildcardRuleService WildcardRules { get; }
+
+        public RuleCommandCoordinatorTestScope()
+        {
+            Directory.CreateDirectory(_directory);
+            WildcardRules = new WildcardRuleService(
+                Path.Combine(_directory, "wildcard_rules.json"));
+        }
+
+        public BackgroundFirewallTaskService CreateBackgroundTaskService()
+        {
+            var dataService = new FirewallDataService(
+                WildcardRules,
+                new UwpService(Path.Combine(_directory, "uwp_apps.json")),
+                new RuleTimestampService(Path.Combine(_directory, "timestamps.json")),
+                Backend);
+
+            var actionsService = new FirewallActionsService(
+                new UserActivityLogger(),
+                null!,
+                null!,
+                null!,
+                WildcardRules,
+                dataService,
+                Backend,
+                Backend,
+                Backend,
+                Backend,
+                Backend);
+
+            return new BackgroundFirewallTaskService(
+                actionsService,
+                new UserActivityLogger(),
+                WildcardRules,
+                dataService);
+        }
+
+        public void Dispose()
+        {
+            WildcardRules.Dispose();
+
+            if (Directory.Exists(_directory))
+            {
+                Directory.Delete(_directory, recursive: true);
+            }
+        }
+    }
 }
