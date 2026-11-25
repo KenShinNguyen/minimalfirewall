@@ -61,6 +61,7 @@ namespace MinimalFirewall
         private CancellationTokenSource? _scanCts = null;
         private System.Windows.Forms.Timer? _trayBlinkTimer;
         private bool _trayBlinkState = false;
+        private int _disposed;
         private const int BaseMainTabItemWidth = 85;
         private const int BaseMainTabItemHeight = 120;
         #endregion
@@ -111,9 +112,7 @@ namespace MinimalFirewall
             _mainViewModel.PopupRequired += OnPopupRequired;
             _mainViewModel.RulePopupRequired += OnRulePopupRequired;
             _mainViewModel.DashboardActionProcessed += OnDashboardActionProcessed;
-            _mainViewModel.SystemChangesUpdated += () => {
-                UpdateUiWithChangesCount();
-            };
+            _mainViewModel.SystemChangesUpdated += OnSystemChangesUpdated;
 
             settingsControl1.ThemeChanged += UpdateThemeAndColors;
             settingsControl1.IconVisibilityChanged += UpdateIconColumnVisibility;
@@ -1360,20 +1359,43 @@ namespace MinimalFirewall
             }
         }
 
+        private void OnSystemChangesUpdated()
+        {
+            SafeInvoke(UpdateUiWithChangesCount);
+        }
+
+        private void DetachEventHandlers()
+        {
+            if (_mainViewModel is not null)
+            {
+                _mainViewModel.DashboardActionProcessed -= OnDashboardActionProcessed;
+                _mainViewModel.SystemChangesUpdated -= OnSystemChangesUpdated;
+            }
+
+            if (_eventListenerService is not null)
+            {
+                _eventListenerService.StartupFailed -= OnEventListenerStartupFailed;
+            }
+        }
+
         private void OnEventListenerStartupFailed(string message)
         {
-            if (IsDisposed)
-            {
-                return;
-            }
+            _activityLogger?.LogDebug($"Event listener startup failed: {message}");
 
-            if (InvokeRequired)
+            SafeBeginInvoke(() =>
             {
-                BeginInvoke(new Action<string>(OnEventListenerStartupFailed), message);
-                return;
-            }
+                if (IsTeardownInProgress())
+                {
+                    return;
+                }
 
-            MessageBox.Show(this, message, "Firewall Event Listener", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(
+                    this,
+                    message,
+                    "Firewall Event Listener",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            });
         }
 
         private void DismissAllPopups()
@@ -1505,20 +1527,83 @@ namespace MinimalFirewall
 
         private bool IsDarkModeEnabled => _appSettings.IsEffectiveDarkTheme;
 
-        private void SafeInvoke(Action action)
+        private bool IsTeardownInProgress()
+            => Volatile.Read(ref _disposed) != 0 || Disposing || IsDisposed;
+
+        private bool SafeInvoke(Action action)
         {
-            if (Disposing || IsDisposed || !IsHandleCreated)
+            ArgumentNullException.ThrowIfNull(action);
+
+            if (IsTeardownInProgress() || !IsHandleCreated)
             {
-                return;
+                return false;
             }
 
-            if (InvokeRequired)
+            if (!InvokeRequired)
             {
-                Invoke(action);
-            }
-            else
-            {
+                if (IsTeardownInProgress())
+                {
+                    return false;
+                }
+
                 action();
+                return true;
+            }
+
+            try
+            {
+                Invoke(new Action(() =>
+                {
+                    if (IsTeardownInProgress())
+                    {
+                        return;
+                    }
+
+                    action();
+                }));
+                return true;
+            }
+            catch (ObjectDisposedException)
+            {
+                return false;
+            }
+            catch (InvalidOperationException) when (
+                IsTeardownInProgress() || !IsHandleCreated)
+            {
+                return false;
+            }
+        }
+
+        private bool SafeBeginInvoke(Action action)
+        {
+            ArgumentNullException.ThrowIfNull(action);
+
+            if (IsTeardownInProgress() || !IsHandleCreated)
+            {
+                return false;
+            }
+
+            try
+            {
+                BeginInvoke(new Action(() =>
+                {
+                    if (IsTeardownInProgress())
+                    {
+                        return;
+                    }
+
+                    action();
+                }));
+                return true;
+            }
+            catch (ObjectDisposedException)
+            {
+                return false;
+            }
+            catch (InvalidOperationException) when (
+                IsTeardownInProgress() || !IsHandleCreated)
+            {
+                return false;
             }
         }
         #endregion 
