@@ -82,7 +82,10 @@ namespace MinimalFirewall
         }
 
         internal bool ShouldExit(CloseReason closeReason)
-            => !_appSettings.CloseToTray || closeReason != CloseReason.UserClosing;
+            => ShouldExitApplication(_appSettings.CloseToTray, closeReason);
+
+        internal static bool ShouldExitApplication(bool closeToTray, CloseReason closeReason)
+            => !closeToTray || closeReason != CloseReason.UserClosing;
 
         internal void StopAutoRefreshTimer()
         {
