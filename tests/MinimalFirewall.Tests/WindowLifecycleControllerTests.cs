@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 using Xunit;
 
 namespace MinimalFirewall.Tests;
@@ -57,7 +59,7 @@ public sealed class WindowLifecycleControllerTests
     [Fact]
     public async Task ExecuteOperationSafelyAsync_CatchesExceptionAfterAwait_AndDoesNotEscape()
     {
-        using var logger = new RecordingUserActivityLogger();
+        var logger = new RecordingUserActivityLogger();
         using var form = new System.Windows.Forms.Form();
         using var controller = new WindowLifecycleController(
             form,
@@ -80,7 +82,7 @@ public sealed class WindowLifecycleControllerTests
     [Fact]
     public async Task ExecuteOperationSafelyAsync_DoesNotLogCancellation()
     {
-        using var logger = new RecordingUserActivityLogger();
+        var logger = new RecordingUserActivityLogger();
         using var form = new System.Windows.Forms.Form();
         using var controller = new WindowLifecycleController(
             form,
