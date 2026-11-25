@@ -14,6 +14,7 @@ namespace MinimalFirewall
         private readonly NotifyIcon _notifyIcon;
         private readonly ContextMenuStrip _contextMenu;
         private bool _disposed;
+        private readonly EventHandler _showWindowHandler;
 
         internal ToolStripMenuItem LockdownMenuItem { get; }
 
@@ -26,6 +27,7 @@ namespace MinimalFirewall
             CancelEventHandler menuOpening)
         {
             _notifyIcon = notifyIcon;
+            _showWindowHandler = showWindow;
             LockdownMenuItem = new ToolStripMenuItem("Toggle Lockdown", null, toggleLockdown);
 
             _contextMenu = new ContextMenuStrip();
@@ -38,7 +40,7 @@ namespace MinimalFirewall
             _notifyIcon.Text = "Minimal Firewall";
             _notifyIcon.Visible = true;
             _notifyIcon.ContextMenuStrip = _contextMenu;
-            _notifyIcon.DoubleClick += showWindow;
+            _notifyIcon.DoubleClick += _showWindowHandler;
         }
 
         internal void SetIcon(Icon? icon)
@@ -57,12 +59,8 @@ namespace MinimalFirewall
             }
 
             _disposed = true;
-            _notifyIcon.DoubleClick -= _notifyIcon_DoubleClick;
+            _notifyIcon.DoubleClick -= _showWindowHandler;
             _contextMenu.Dispose();
-        }
-
-        private void _notifyIcon_DoubleClick(object? sender, EventArgs e)
-        {
         }
     }
 }
