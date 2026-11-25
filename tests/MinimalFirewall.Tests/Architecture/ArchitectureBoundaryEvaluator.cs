@@ -56,7 +56,7 @@ internal static class CSharpSourceSanitizer
                 }
 
                 bool verbatim = source.AsSpan(index, literalPrefixEnd - index).Contains('@');
-                int literalQuoteCount = quoteCount >= 3 ? quoteCount : 1;
+                int literalQuoteCount = !verbatim && quoteCount >= 3 ? quoteCount : 1;
                 int end = FindStringLiteralEnd(source, literalPrefixEnd, literalQuoteCount, verbatim);
                 MaskRange(chars, index, end);
                 index = end;
