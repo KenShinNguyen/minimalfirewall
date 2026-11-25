@@ -46,7 +46,7 @@ public sealed class ArchitectureBoundaryNegativeFixtureTests
             scopedMethodExceptions: exceptions);
 
         string violation = Assert.Single(violations);
-        Assert.Contains("MainForm.cs:13", violation, StringComparison.Ordinal);
+        Assert.Contains("MainForm.cs:15", violation, StringComparison.Ordinal);
         Assert.Contains("WindowsFirewallBackend", violation, StringComparison.Ordinal);
     }
 
@@ -147,7 +147,7 @@ public sealed class ArchitectureBoundaryNegativeFixtureTests
 
     private sealed class ViolatingCoordinatorFixture
     {
-        public DummyWindowsFirewallBackend Backend { get; } = new();
+        public DummyWindowsFirewallBackend Backend = new();
     }
 
     private sealed class ViolatingViewModelFixture
