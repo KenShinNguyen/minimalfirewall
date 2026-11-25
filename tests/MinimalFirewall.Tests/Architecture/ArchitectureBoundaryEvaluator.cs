@@ -263,7 +263,9 @@ internal static class ArchitectureBoundaryEvaluator
         var compiledPatterns = forbiddenIdentifiers
             .Select(identifier =>
             {
-                string pattern = identifier.EndsWith('_')
+                bool isPrefixToken = identifier.EndsWith('_') ||
+                    identifier.Equals("INetFw", StringComparison.Ordinal);
+                string pattern = isPrefixToken
                     ? $@"\b{Regex.Escape(identifier)}"
                     : $@"\b{Regex.Escape(identifier)}\b";
 
