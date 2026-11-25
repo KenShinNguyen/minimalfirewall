@@ -49,6 +49,7 @@ public sealed class FirewallRuleUpdateBoundaryTests
 
     [Theory]
     [InlineData(unchecked((int)0x80070005), FirewallRuleUpdateErrorCode.AccessDenied)]
+    [InlineData(unchecked((int)0x800706D9), FirewallRuleUpdateErrorCode.FirewallUnavailable)]
     [InlineData(unchecked((int)0x80070002), FirewallRuleUpdateErrorCode.RuleNotFound)]
     [InlineData(unchecked((int)0x80070490), FirewallRuleUpdateErrorCode.RuleNotFound)]
     [InlineData(unchecked((int)0x80004005), FirewallRuleUpdateErrorCode.OperationFailed)]
@@ -57,6 +58,21 @@ public sealed class FirewallRuleUpdateBoundaryTests
         FirewallRuleUpdateErrorCode expected)
     {
         Assert.Equal(expected, FirewallRuleUpdateErrorMapper.FromHResult(hresult));
+    }
+
+    [Theory]
+    [InlineData(unchecked((int)0x80070005), "Access denied", "Administrator")]
+    [InlineData(unchecked((int)0x800706D9), "Base Filtering Engine", "services are running")]
+    public void ErrorMapper_ProducesActionablePlatformDiagnostics(
+        int hresult,
+        string expectedText,
+        string expectedGuidance)
+    {
+        string message = FirewallRuleUpdateErrorMapper.DescribeHResult(hresult);
+
+        Assert.Contains(expectedText, message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(expectedGuidance, message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains($"0x{hresult:X8}", message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

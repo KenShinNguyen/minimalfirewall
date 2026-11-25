@@ -57,7 +57,9 @@ public sealed class WindowsFirewallRuleUpdateBackend : IFirewallRuleUpdateBacken
             string error = errorCode switch
             {
                 FirewallRuleUpdateErrorCode.AccessDenied =>
-                    "Windows Firewall denied the rule update. Check administrator permissions.",
+                    FirewallRuleUpdateErrorMapper.DescribeHResult(ex.HResult),
+                FirewallRuleUpdateErrorCode.FirewallUnavailable =>
+                    FirewallRuleUpdateErrorMapper.DescribeHResult(ex.HResult),
                 FirewallRuleUpdateErrorCode.RuleNotFound =>
                     $"Firewall rule '{ruleName}' was not found.",
                 _ =>

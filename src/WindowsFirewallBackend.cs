@@ -46,11 +46,7 @@ public sealed class WindowsFirewallBackend : IFirewallBackend
     }
 
     private static string DescribeComError(COMException ex)
-    {
-        return ex.HResult == E_ACCESSDENIED
-            ? "Access denied - administrator privileges are required."
-            : $"HResult 0x{ex.HResult:X8}: {ex.Message}";
-    }
+        => FirewallRuleUpdateErrorMapper.DescribeHResult(ex.HResult);
 
     private static NET_FW_ACTION_? TryGetDefaultOutboundAction()
     {
