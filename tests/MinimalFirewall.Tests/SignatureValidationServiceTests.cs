@@ -23,6 +23,24 @@ public sealed class SignatureValidationServiceTests
         Assert.Equal(0, verifier.Calls);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Validate_WhenPathIsBlank_DoesNotCallWinTrust(string filePath)
+    {
+        var verifier = new FakeWinTrustVerifier { Result = true };
+        var core = new SignatureValidationCore(verifier, _ => null);
+
+        bool trusted = core.IsSignatureTrusted(
+            filePath,
+            [],
+            allowLegacyCnFallback: false,
+            out _);
+
+        Assert.False(trusted);
+        Assert.Equal(0, verifier.Calls);
+    }
+
     [Fact]
     public void Validate_PassesWholeChainRevocationAndChainFlagsToWinTrustVerifier()
     {
@@ -159,6 +177,31 @@ public sealed class SignatureValidationServiceTests
                 out var match);
 
             Assert.False(trusted);
+            Assert.Equal(PublisherTrustMatchKind.NoMatch, match.MatchKind);
+        }
+        finally
+        {
+            File.Delete(file);
+        }
+    }
+
+    [Fact]
+    public void Validate_WhenSignerCertificateCannotBeExtracted_DoesNotFallBackToPublisherName()
+    {
+        string file = CreateTempFile();
+        try
+        {
+            var verifier = new FakeWinTrustVerifier { Result = true };
+            var core = new SignatureValidationCore(verifier, _ => null);
+
+            bool trusted = core.IsSignatureTrusted(
+                file,
+                ["Contoso"],
+                allowLegacyCnFallback: true,
+                out var match);
+
+            Assert.False(trusted);
+            Assert.Equal(1, verifier.Calls);
             Assert.Equal(PublisherTrustMatchKind.NoMatch, match.MatchKind);
         }
         finally

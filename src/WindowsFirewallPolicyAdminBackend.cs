@@ -39,14 +39,14 @@ public sealed class WindowsFirewallPolicyAdminBackend : IFirewallPolicyAdminBack
         {
             Debug.WriteLine($"[AdminTask ERROR] Firewall reset COM operation failed: {ex.Message}");
             return FirewallPolicyAdminResult.Failure(
-                "Windows Firewall reset failed.",
+                $"Windows Firewall reset failed. {FirewallRuleUpdateErrorMapper.DescribeHResult(ex.HResult)}",
                 ex);
         }
         catch (UnauthorizedAccessException ex)
         {
             Debug.WriteLine($"[AdminTask ERROR] Firewall reset access denied: {ex.Message}");
             return FirewallPolicyAdminResult.Failure(
-                "Windows Firewall reset was denied.",
+                $"Windows Firewall reset failed. {FirewallRuleUpdateErrorMapper.DescribeHResult(ex.HResult)}",
                 ex);
         }
         catch (Exception ex)

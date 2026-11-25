@@ -60,6 +60,11 @@ public static class FirewallRuleUpdateErrorMapper
             return FirewallRuleUpdateErrorCode.AccessDenied;
         }
 
+        if (hresult == unchecked((int)0x800706D9))
+        {
+            return FirewallRuleUpdateErrorCode.FirewallUnavailable;
+        }
+
         if (hresult == unchecked((int)0x80070002) ||
             hresult == unchecked((int)0x80070490))
         {
@@ -67,6 +72,22 @@ public static class FirewallRuleUpdateErrorMapper
         }
 
         return FirewallRuleUpdateErrorCode.OperationFailed;
+    }
+
+    public static string DescribeHResult(int hresult)
+    {
+        string code = $"0x{hresult:X8}";
+        return FromHResult(hresult) switch
+        {
+            FirewallRuleUpdateErrorCode.AccessDenied =>
+                $"Access denied ({code}). Run Minimal Firewall as Administrator and check applicable Group Policy.",
+            FirewallRuleUpdateErrorCode.FirewallUnavailable =>
+                $"The Windows Firewall or Base Filtering Engine (BFE) service endpoint is unavailable ({code}). Verify that both services are running.",
+            FirewallRuleUpdateErrorCode.RuleNotFound =>
+                $"The requested firewall rule was not found ({code}).",
+            _ =>
+                $"The Windows Firewall operation failed ({code})."
+        };
     }
 }
 

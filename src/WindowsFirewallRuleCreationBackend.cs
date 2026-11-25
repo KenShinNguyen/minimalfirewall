@@ -93,13 +93,13 @@ public sealed class WindowsFirewallRuleCreationBackend : IFirewallRuleCreationBa
         catch (COMException ex)
         {
             return FirewallRuleCreationResult.Failure(
-                $"Create firewall rule failed with HRESULT 0x{ex.HResult:X8}: {ex.Message}",
+                $"Create firewall rule failed. {FirewallRuleUpdateErrorMapper.DescribeHResult(ex.HResult)} Details: {ex.Message}",
                 ex);
         }
         catch (UnauthorizedAccessException ex)
         {
             return FirewallRuleCreationResult.Failure(
-                $"Create firewall rule failed with HRESULT 0x{ex.HResult:X8}: {ex.Message}",
+                $"Create firewall rule failed. {FirewallRuleUpdateErrorMapper.DescribeHResult(ex.HResult)} Details: {ex.Message}",
                 ex);
         }
         catch (InvalidOperationException ex)

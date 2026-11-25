@@ -172,13 +172,13 @@ public sealed class WindowsFirewallRuleGroupBackend : IFirewallRuleGroupBackend
         catch (COMException ex)
         {
             return FirewallRuleGroupResult<T>.Failure(
-                $"{operationName} failed with HRESULT 0x{ex.HResult:X8}: {ex.Message}",
+                $"{operationName} failed. {FirewallRuleUpdateErrorMapper.DescribeHResult(ex.HResult)} Details: {ex.Message}",
                 ex);
         }
         catch (UnauthorizedAccessException ex)
         {
             return FirewallRuleGroupResult<T>.Failure(
-                $"{operationName} failed with HRESULT 0x{ex.HResult:X8}: {ex.Message}",
+                $"{operationName} failed. {FirewallRuleUpdateErrorMapper.DescribeHResult(ex.HResult)} Details: {ex.Message}",
                 ex);
         }
         catch (InvalidOperationException ex)

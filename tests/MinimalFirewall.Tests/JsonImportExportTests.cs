@@ -134,6 +134,59 @@ public sealed class JsonImportExportTests
     }
 
     [Fact]
+    public void Import_ReplaceWithInvalidRule_RejectsWholeBatchBeforeEnqueueingDeleteAll()
+    {
+        var backend = new InMemoryFirewallBackend();
+        using var wildcard = CreateWildcardService();
+        using var actions = CreateActionsService(backend, wildcard);
+        using var queue = new BackgroundFirewallTaskService(
+            actions,
+            new UserActivityLogger(),
+            wildcard,
+            CreateDataService(backend, wildcard));
+
+        actions.BackgroundTaskService = queue;
+
+        var payload = new ExportContainer
+        {
+            AdvancedRules =
+            [
+                new AdvancedRuleViewModel
+                {
+                    Name = "Valid first rule",
+                    Status = "Allow",
+                    Direction = Directions.Outgoing,
+                    Protocol = 6
+                }
+            ],
+            WildcardRules =
+            [
+                new WildcardRule
+                {
+                    FolderPath = string.Empty,
+                    ExeName = "*.exe",
+                    Action = "Allow Outbound"
+                }
+            ]
+        };
+        string json = JsonSerializer.Serialize(
+            payload,
+            ExportContainerJsonContext.Default.ExportContainer);
+
+        bool accepted = actions.EnqueueImportTasks(
+            json,
+            replace: true,
+            out int advancedCount,
+            out int wildcardCount);
+
+        Assert.False(accepted);
+        Assert.Equal(0, advancedCount);
+        Assert.Equal(0, wildcardCount);
+        Assert.Empty(backend.Operations);
+        Assert.Empty(wildcard.GetRules());
+    }
+
+    [Fact]
     public void Import_UnknownExtraProperties_IsIgnoredForForwardCompatibility()
     {
         const string json = """

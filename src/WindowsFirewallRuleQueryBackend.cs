@@ -271,12 +271,12 @@ public sealed class WindowsFirewallRuleQueryBackend : IFirewallRuleQueryBackend
         catch (COMException ex)
         {
             return FirewallRuleQueryResult<T>.Failure(
-                $"{operationName} failed with HRESULT 0x{ex.HResult:X8}: {ex.Message}", ex);
+                $"{operationName} failed. {FirewallRuleUpdateErrorMapper.DescribeHResult(ex.HResult)} Details: {ex.Message}", ex);
         }
         catch (UnauthorizedAccessException ex)
         {
             return FirewallRuleQueryResult<T>.Failure(
-                $"{operationName} failed with HRESULT 0x{ex.HResult:X8}: {ex.Message}", ex);
+                $"{operationName} failed. {FirewallRuleUpdateErrorMapper.DescribeHResult(ex.HResult)} Details: {ex.Message}", ex);
         }
         catch (InvalidOperationException ex)
         {

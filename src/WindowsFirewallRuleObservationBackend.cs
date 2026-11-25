@@ -55,7 +55,7 @@ public sealed class WindowsFirewallRuleObservationBackend : IFirewallRuleObserva
             }
             catch (COMException ex)
             {
-                Debug.WriteLine($"[ERROR] GetRuleByName ('{ruleName}'): COM error. HResult: 0x{ex.HResult:X8}. Message: {ex.Message}");
+                Debug.WriteLine($"[ERROR] GetRuleByName ('{ruleName}'): {FirewallRuleUpdateErrorMapper.DescribeHResult(ex.HResult)} Details: {ex.Message}");
                 return null;
             }
 
@@ -65,12 +65,12 @@ public sealed class WindowsFirewallRuleObservationBackend : IFirewallRuleObserva
         }
         catch (COMException ex)
         {
-            Debug.WriteLine($"[ERROR] GetRuleByName ('{ruleName}'): COM error. HResult: 0x{ex.HResult:X8}. Message: {ex.Message}");
+            Debug.WriteLine($"[ERROR] GetRuleByName ('{ruleName}'): {FirewallRuleUpdateErrorMapper.DescribeHResult(ex.HResult)} Details: {ex.Message}");
             return null;
         }
         catch (InvalidOperationException ex)
         {
-            Debug.WriteLine($"[ERROR] GetRuleByName ('{ruleName}'): Firewall COM activation failed. {ex.Message}");
+            Debug.WriteLine($"[ERROR] GetRuleByName ('{ruleName}'): {FirewallRuleUpdateErrorMapper.DescribeHResult(ex.HResult)} Details: {ex.Message}");
             return null;
         }
         finally

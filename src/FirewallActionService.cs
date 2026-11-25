@@ -1381,27 +1381,67 @@ namespace MinimalFirewall
         public async Task<string> ExportAllMfwRulesAsync()
         {
             var advancedRules = await _dataService.GetAggregatedRulesAsync(CancellationToken.None);
-            var portableAdvancedRules = advancedRules.SelectMany(ar => ar.UnderlyingRules ?? [])
+            var portableAdvancedRules = advancedRules
+                .SelectMany(rule => rule.UnderlyingRules ?? [])
                 .OfType<AdvancedRuleViewModel>()
-                .Select(static rule =>
-                {
-                    rule.ApplicationName = PathResolver.ConvertToEnvironmentPath(rule.ApplicationName);
-                    return rule;
-                }).ToList();
-            var wildcardRules = _wildcardRuleService.GetRules()
-                .Select(r =>
-                {
-                    r.FolderPath = PathResolver.ConvertToEnvironmentPath(r.FolderPath);
-                    return r;
-                }).ToList();
+                .Select(CloneAdvancedRuleForExport)
+                .ToList();
+
+            var portableWildcardRules = _wildcardRuleService.GetRules()
+                .Select(CloneWildcardRuleForExport)
+                .ToList();
+
             var container = new ExportContainer
             {
                 ExportDate = DateTime.UtcNow,
                 AdvancedRules = portableAdvancedRules,
-                WildcardRules = wildcardRules
+                WildcardRules = portableWildcardRules
             };
-            return JsonSerializer.Serialize(container, ExportContainerJsonContext.Default.ExportContainer);
+
+            return JsonSerializer.Serialize(
+                container,
+                ExportContainerJsonContext.Default.ExportContainer);
         }
+
+        private static AdvancedRuleViewModel CloneAdvancedRuleForExport(AdvancedRuleViewModel rule)
+            => new()
+            {
+                Name = rule.Name,
+                Status = rule.Status,
+                IsEnabled = rule.IsEnabled,
+                Direction = rule.Direction,
+                LocalPorts = rule.LocalPorts,
+                RemotePorts = rule.RemotePorts,
+                Protocol = rule.Protocol,
+                ProtocolName = rule.ProtocolName,
+                ApplicationName = PathResolver.ConvertToEnvironmentPath(rule.ApplicationName),
+                ServiceName = rule.ServiceName,
+                LocalAddresses = rule.LocalAddresses,
+                RemoteAddresses = rule.RemoteAddresses,
+                Profiles = rule.Profiles,
+                Description = rule.Description,
+                Grouping = rule.Grouping,
+                Type = rule.Type,
+                WildcardDefinition = rule.WildcardDefinition is null
+                    ? null
+                    : CloneWildcardRuleForExport(rule.WildcardDefinition),
+                InterfaceTypes = rule.InterfaceTypes,
+                IcmpTypesAndCodes = rule.IcmpTypesAndCodes,
+                DateAdded = rule.DateAdded,
+                AutoAllowedPublisher = rule.AutoAllowedPublisher
+            };
+
+        private static WildcardRule CloneWildcardRuleForExport(WildcardRule rule)
+            => new()
+            {
+                FolderPath = PathResolver.ConvertToEnvironmentPath(rule.FolderPath),
+                ExeName = rule.ExeName,
+                Action = rule.Action,
+                Protocol = rule.Protocol,
+                LocalPorts = rule.LocalPorts,
+                RemotePorts = rule.RemotePorts,
+                RemoteAddresses = rule.RemoteAddresses
+            };
 
         public async Task ImportRulesAsync(string jsonContent, bool replace)
         {
@@ -1413,14 +1453,18 @@ namespace MinimalFirewall
             // Wait for the queue to drain
             await BackgroundTaskService!.WhenIdleAsync();
 
-            activityLogger.LogChange("Rules Imported", $"Imported {advancedCount} advanced rules and {wildcardCount} wildcard rules. Replace: {replace}");
+            activityLogger.LogChange(
+                "Rules Imported",
+                $"Imported {advancedCount} advanced rules and {wildcardCount} wildcard rules. Replace: {replace}");
         }
 
-        // Enqueues the individual import tasks without waiting for them. The queue
-        // handler for ImportRules must use this instead of ImportRulesAsync: awaiting
-        // WhenIdleAsync from inside a handler deadlocks the single worker on its own
-        // queue (the handler counts as outstanding work until it returns).
-        public bool EnqueueImportTasks(string jsonContent, bool replace, out int advancedCount, out int wildcardCount)
+        // Validate the complete backup and build the full task batch before queue mutation.
+        // In particular, an invalid payload must never enqueue DeleteAllMfwRules first.
+        public bool EnqueueImportTasks(
+            string jsonContent,
+            bool replace,
+            out int advancedCount,
+            out int wildcardCount)
         {
             advancedCount = 0;
             wildcardCount = 0;
@@ -1431,41 +1475,61 @@ namespace MinimalFirewall
                 return false;
             }
 
+            if (!FirewallConfigTransferCoordinator.TryDeserializeAndValidate(
+                    jsonContent,
+                    out ExportContainer? container,
+                    out string failureReason))
+            {
+                activityLogger.LogDebug($"[Import] Rejected firewall backup: {failureReason}");
+                return false;
+            }
+
             try
             {
-                var container = JsonSerializer.Deserialize(jsonContent, ExportContainerJsonContext.Default.ExportContainer);
-                if (container == null)
-                {
-                    activityLogger.LogDebug("[Import] Failed to deserialize JSON content.");
-                    return false;
-                }
+                var tasks = new List<FirewallTask>();
+                int validatedAdvancedCount = 0;
+                int validatedWildcardCount = 0;
 
                 if (replace)
                 {
-                    BackgroundTaskService.EnqueueTask(new FirewallTask(FirewallTaskType.DeleteAllMfwRules, new object()));
+                    tasks.Add(new FirewallTask(
+                        FirewallTaskType.DeleteAllMfwRules,
+                        new object(),
+                        "Replacing Minimal Firewall rules"));
                 }
 
-                foreach (var ruleVm in container.AdvancedRules ?? [])
+                foreach (AdvancedRuleViewModel rule in container!.AdvancedRules)
                 {
-                    if (ruleVm == null) continue;
-                    ruleVm.ApplicationName = PathResolver.ConvertFromEnvironmentPath(ruleVm.ApplicationName);
-                    var payload = new CreateAdvancedRulePayload { ViewModel = ruleVm, InterfaceTypes = ruleVm.InterfaceTypes, IcmpTypesAndCodes = ruleVm.IcmpTypesAndCodes };
-                    BackgroundTaskService.EnqueueTask(new FirewallTask(FirewallTaskType.CreateAdvancedRule, payload));
-                    advancedCount++;
+                    rule.ApplicationName = PathResolver.ConvertFromEnvironmentPath(rule.ApplicationName);
+                    var payload = new CreateAdvancedRulePayload
+                    {
+                        ViewModel = rule,
+                        InterfaceTypes = rule.InterfaceTypes,
+                        IcmpTypesAndCodes = rule.IcmpTypesAndCodes
+                    };
+                    tasks.Add(new FirewallTask(FirewallTaskType.CreateAdvancedRule, payload));
+                    validatedAdvancedCount++;
                 }
 
-                foreach (var wildcardRule in container.WildcardRules ?? [])
+                foreach (WildcardRule rule in container.WildcardRules)
                 {
-                    wildcardRule.FolderPath = PathResolver.ConvertFromEnvironmentPath(wildcardRule.FolderPath);
-                    BackgroundTaskService.EnqueueTask(new FirewallTask(FirewallTaskType.AddWildcardRule, wildcardRule));
-                    wildcardCount++;
+                    rule.FolderPath = PathResolver.ConvertFromEnvironmentPath(rule.FolderPath);
+                    tasks.Add(new FirewallTask(FirewallTaskType.AddWildcardRule, rule));
+                    validatedWildcardCount++;
                 }
 
+                foreach (FirewallTask task in tasks)
+                {
+                    BackgroundTaskService.EnqueueTask(task);
+                }
+
+                advancedCount = validatedAdvancedCount;
+                wildcardCount = validatedWildcardCount;
                 return true;
             }
-            catch (JsonException ex)
+            catch (Exception ex)
             {
-                activityLogger.LogException("ImportRules", ex);
+                activityLogger.LogException("EnqueueImportTasks", ex);
                 return false;
             }
         }
