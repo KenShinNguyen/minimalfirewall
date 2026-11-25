@@ -86,11 +86,6 @@ namespace MinimalFirewall
 
         internal void StopAutoRefreshTimer()
         {
-            if (_disposed)
-            {
-                return;
-            }
-
             _autoRefreshTimer?.Dispose();
             _autoRefreshTimer = null;
         }
