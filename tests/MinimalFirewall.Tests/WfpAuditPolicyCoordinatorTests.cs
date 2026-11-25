@@ -1,3 +1,6 @@
+using System;
+using System.IO;
+using System.Text.Json;
 using Xunit;
 
 namespace MinimalFirewall.Tests;
@@ -49,13 +52,11 @@ public sealed class WfpAuditPolicyCoordinatorTests
         Assert.True(firstBackend.Enabled);
         Assert.NotNull(store.State);
 
-        // Simulate process death: the durable state survives while the OS remains enabled.
         var secondBackend = new FakeBackend(true);
         var secondCoordinator = CreateCoordinator(secondBackend, store);
 
         secondCoordinator.EnableWithBaselineTracking();
         Assert.True(secondBackend.Enabled);
-        // The durable baseline is preserved; the OS is already enabled after the crash, so no redundant mutation is required.
         Assert.Equal(0, secondBackend.SetCalls);
         Assert.False(store.State!.Subcategories.Single().WasFailureAuditingEnabledBeforeApp);
 
@@ -77,6 +78,49 @@ public sealed class WfpAuditPolicyCoordinatorTests
 
         Assert.NotNull(store.State);
         Assert.True(backend.Enabled);
+    }
+
+    [Fact]
+    public void FileStoreLoad_WhenStateJsonIsCorrupted_ReturnsNullAndLogsWarning()
+    {
+        using var directory = new TemporaryDirectory();
+        string path = Path.Combine(directory.Path, "wfp-state.json");
+        File.WriteAllText(path, "{ not-json");
+        var logger = new RecordingAppLogger();
+
+        var store = new FileWfpAuditStateStore(path, logger);
+
+        Assert.Null(store.Load());
+
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal(AppLogLevel.Warning, entry.Level);
+        Assert.Equal(nameof(FileWfpAuditStateStore), entry.Category);
+        Assert.Contains("wfp-state.json", entry.Message);
+        Assert.IsType<JsonException>(entry.Exception);
+    }
+
+    [Fact]
+    public void FileStoreLoad_WhenFileIsLocked_ReturnsNullAndLogsIoFailure()
+    {
+        using var directory = new TemporaryDirectory();
+        string path = Path.Combine(directory.Path, "wfp-state.json");
+        File.WriteAllText(path, """{"Subcategories":[]}""");
+        var logger = new RecordingAppLogger();
+
+        using (var blocker = new FileStream(
+                   path,
+                   FileMode.Open,
+                   FileAccess.ReadWrite,
+                   FileShare.None))
+        {
+            var store = new FileWfpAuditStateStore(path, logger);
+
+            Assert.Null(store.Load());
+        }
+
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal(AppLogLevel.Warning, entry.Level);
+        Assert.IsAssignableFrom<IOException>(entry.Exception);
     }
 
     private static WfpAuditPolicyCoordinator CreateCoordinator(
@@ -119,5 +163,43 @@ public sealed class WfpAuditPolicyCoordinatorTests
         public void Save(WfpAuditRecoveryState state) => State = state;
 
         public void Delete() => State = null;
+    }
+
+    private sealed class RecordingAppLogger : IAppLogger
+    {
+        public AppLogLevel MinimumLevel { get; set; } = AppLogLevel.Debug;
+        public List<LogEntry> Entries { get; } = [];
+
+        public void Log(
+            AppLogLevel level,
+            string category,
+            string message,
+            Exception? exception = null,
+            string? errorId = null)
+            => Entries.Add(new LogEntry(level, category, message, exception, errorId));
+    }
+
+    private sealed record LogEntry(
+        AppLogLevel Level,
+        string Category,
+        string Message,
+        Exception? Exception,
+        string? ErrorId);
+
+    private sealed class TemporaryDirectory : IDisposable
+    {
+        public string Path { get; } = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(),
+            $"mfw-wfp-state-{Guid.NewGuid():N}");
+
+        public TemporaryDirectory() => Directory.CreateDirectory(Path);
+
+        public void Dispose()
+        {
+            if (Directory.Exists(Path))
+            {
+                Directory.Delete(Path, recursive: true);
+            }
+        }
     }
 }

@@ -43,6 +43,7 @@ namespace MinimalFirewall
         private readonly UserActivityLogger _activityLogger;
         private readonly WildcardRuleService _wildcardRuleService;
         private readonly FirewallDataService _dataService;
+        private readonly IAppLogger _appLogger;
 
         private readonly Dictionary<FirewallTaskType, IFirewallTaskHandler> _handlers;
 
@@ -64,12 +65,14 @@ namespace MinimalFirewall
             FirewallActionsService actionsService,
             UserActivityLogger activityLogger,
             WildcardRuleService wildcardRuleService,
-            FirewallDataService dataService)
+            FirewallDataService dataService,
+            IAppLogger? appLogger = null)
         {
             _actionsService = actionsService;
             _activityLogger = activityLogger;
             _wildcardRuleService = wildcardRuleService;
             _dataService = dataService;
+            _appLogger = appLogger ?? AppLog.Current;
 
             _handlers = RegisterHandlers();
 
@@ -103,7 +106,7 @@ namespace MinimalFirewall
 
             // Count post-Add can throw if Dispose() raced; task is genuinely queued
             // either way, so don't unwind the increment.
-            try { SafeInvoke(QueueCountChanged, _taskQueue.Count); }
+            try { SafeInvoke(QueueCountChanged, _taskQueue.Count, nameof(QueueCountChanged)); }
             catch (ObjectDisposedException) { }
         }
 
@@ -124,7 +127,7 @@ namespace MinimalFirewall
                         if (!_taskQueue.TryTake(out task, 1500, _cancellationTokenSource.Token))
                         {
                             // Timed out => No tasks came in for 1.5s. Safe to set Ready.
-                            SafeInvoke(StatusChanged, "Ready");
+                            SafeInvoke(StatusChanged, "Ready", nameof(StatusChanged));
 
                             // Now block indefinitely until work actually arrives
                             task = _taskQueue.Take(_cancellationTokenSource.Token);
@@ -160,7 +163,7 @@ namespace MinimalFirewall
 
         private async Task RunTaskLogicAsync(FirewallTask task)
         {
-            SafeInvoke(StatusChanged, task.Description);
+            SafeInvoke(StatusChanged, task.Description, nameof(StatusChanged));
             TaskResult result = TaskResult.None;
 
             try
@@ -204,10 +207,10 @@ namespace MinimalFirewall
 
                 if (result.RequiresWildcardRefresh && queueCount == 0)
                 {
-                    SafeInvoke(WildcardRulesChanged);
+                    SafeInvoke(WildcardRulesChanged, nameof(WildcardRulesChanged));
                 }
 
-                SafeInvoke(QueueCountChanged, queueCount);
+                SafeInvoke(QueueCountChanged, queueCount, nameof(QueueCountChanged));
                 Interlocked.Decrement(ref _outstandingWork);
                 SignalIdleIfQuiescent();
             }
@@ -262,15 +265,54 @@ namespace MinimalFirewall
             }
         }
 
-        // Helper to prevent subscriber errors (UI crashes) from killing the service
-        private void SafeInvoke(Action? action)
+        // A faulty UI/event subscriber must not kill the worker, but it must leave
+        // an observable diagnostic instead of disappearing into an empty catch.
+        private void SafeInvoke(Action? action, string callbackName)
         {
-            try { action?.Invoke(); } catch { /* Ignore UI update errors */ }
+            try
+            {
+                action?.Invoke();
+            }
+            catch (Exception ex)
+            {
+                LogCallbackFailure(callbackName, ex);
+            }
         }
 
-        private void SafeInvoke<T>(Action<T>? action, T param)
+        private void SafeInvoke<T>(Action<T>? action, T param, string callbackName)
         {
-            try { action?.Invoke(param); } catch { /* Ignore UI update errors */ }
+            try
+            {
+                action?.Invoke(param);
+            }
+            catch (Exception ex)
+            {
+                LogCallbackFailure(callbackName, ex);
+            }
+        }
+
+        private void LogCallbackFailure(string callbackName, Exception exception)
+        {
+            try
+            {
+                _appLogger.Error(
+                    nameof(BackgroundFirewallTaskService),
+                    $"{callbackName} subscriber failed.",
+                    exception,
+                    SafeAsyncRunner.CreateErrorId());
+            }
+            catch (Exception loggingException)
+            {
+                try
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[BackgroundFirewallTaskService] Failed to log {callbackName} subscriber error: {loggingException}");
+                }
+                catch
+                {
+                    // The callback failure must remain contained even if diagnostics are unavailable.
+                }
+            }
         }
 
         private int SafeQueueCount()
@@ -361,15 +403,32 @@ namespace MinimalFirewall
             {
                 drained = _worker.Wait(ShutdownDrainTimeoutMs);
             }
-            catch (AggregateException) { drained = true; }
-            catch (Exception) { drained = true; }
+            catch (AggregateException ex)
+            {
+                LogCallbackFailure("Dispose.WorkerWait", ex);
+                drained = true;
+            }
+            catch (Exception ex)
+            {
+                LogCallbackFailure("Dispose.WorkerWait", ex);
+                drained = true;
+            }
 
             if (!drained)
             {
                 _cancellationTokenSource.Cancel();
-                try { _worker.Wait(2000); }
-                catch (AggregateException) { }
-                catch (Exception) { }
+                try
+                {
+                    _worker.Wait(2000);
+                }
+                catch (AggregateException ex)
+                {
+                    LogCallbackFailure("Dispose.CancellationWait", ex);
+                }
+                catch (Exception ex)
+                {
+                    LogCallbackFailure("Dispose.CancellationWait", ex);
+                }
             }
 
             // Release any callers still awaiting WhenIdleAsync().

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 
 namespace MinimalFirewall;
@@ -28,11 +29,13 @@ public sealed class FileWfpAuditStateStore : IWfpAuditStateStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     private readonly string _stateFilePath;
+    private readonly IAppLogger _logger;
 
-    public FileWfpAuditStateStore(string stateFilePath)
+    public FileWfpAuditStateStore(string stateFilePath, IAppLogger? logger = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(stateFilePath);
         _stateFilePath = stateFilePath;
+        _logger = logger ?? AppLog.Current;
     }
 
     public WfpAuditRecoveryState? Load()
@@ -49,6 +52,18 @@ public sealed class FileWfpAuditStateStore : IWfpAuditStateStore
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
+            try
+            {
+                _logger.Warning(
+                    nameof(FileWfpAuditStateStore),
+                    $"Failed to load WFP audit recovery state '{Path.GetFileName(_stateFilePath)}'.",
+                    ex);
+            }
+            catch (Exception loggingException)
+            {
+                TryWriteFallbackDiagnostic(loggingException);
+            }
+
             return null;
         }
     }
@@ -84,6 +99,18 @@ public sealed class FileWfpAuditStateStore : IWfpAuditStateStore
         if (File.Exists(_stateFilePath))
         {
             File.Delete(_stateFilePath);
+        }
+    }
+
+    private static void TryWriteFallbackDiagnostic(Exception exception)
+    {
+        try
+        {
+            Debug.WriteLine($"[WFP State Store] Failed to record a recovery-state read error: {exception.Message}");
+        }
+        catch
+        {
+            // A broken debug listener must not change the recovery-state read result.
         }
     }
 }
