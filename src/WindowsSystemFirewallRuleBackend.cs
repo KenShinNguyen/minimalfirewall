@@ -57,11 +57,13 @@ public sealed class WindowsSystemFirewallRuleBackend : ISystemFirewallRuleBacken
         }
         catch (COMException ex)
         {
-            return SystemFirewallRuleOperationResult.Failure(ex.Message);
+            return SystemFirewallRuleOperationResult.Failure(
+                $"{FirewallRuleUpdateErrorMapper.DescribeHResult(ex.HResult)} Details: {ex.Message}");
         }
         catch (InvalidOperationException ex)
         {
-            return SystemFirewallRuleOperationResult.Failure(ex.Message);
+            return SystemFirewallRuleOperationResult.Failure(
+                $"{FirewallRuleUpdateErrorMapper.DescribeHResult(ex.HResult)} Details: {ex.Message}");
         }
     }
 
@@ -81,7 +83,8 @@ public sealed class WindowsSystemFirewallRuleBackend : ISystemFirewallRuleBacken
         }
         catch (COMException ex)
         {
-            return SystemFirewallRuleOperationResult.Failure(ex.Message);
+            return SystemFirewallRuleOperationResult.Failure(
+                $"{FirewallRuleUpdateErrorMapper.DescribeHResult(ex.HResult)} Details: {ex.Message}");
         }
     }
 
@@ -153,7 +156,7 @@ public sealed class WindowsSystemFirewallRuleBackend : ISystemFirewallRuleBacken
             }
             catch (COMException ex)
             {
-                Debug.WriteLine($"[ERROR] GetRuleByName ('{ruleName}'): COM error. HResult: 0x{ex.HResult:X8}. Message: {ex.Message}");
+                Debug.WriteLine($"[ERROR] GetRuleByName ('{ruleName}'): {FirewallRuleUpdateErrorMapper.DescribeHResult(ex.HResult)} Details: {ex.Message}");
                 return null;
             }
         }

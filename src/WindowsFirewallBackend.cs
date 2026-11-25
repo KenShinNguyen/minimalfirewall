@@ -53,7 +53,7 @@ public sealed class WindowsFirewallBackend : IFirewallBackend
         try { firewallPolicy = GetLocalPolicy(); }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[ERROR] TryGetDefaultOutboundAction: Could not open firewall policy. {ex.Message}");
+            Debug.WriteLine($"[ERROR] TryGetDefaultOutboundAction: {FirewallRuleUpdateErrorMapper.DescribeHResult(ex.HResult)} Details: {ex.Message}");
             return null;
         }
 
@@ -74,7 +74,7 @@ public sealed class WindowsFirewallBackend : IFirewallBackend
         }
         catch (COMException ex)
         {
-            Debug.WriteLine($"[ERROR] TryGetDefaultOutboundAction: Failed. HResult: 0x{ex.HResult:X8}. Message: {ex.Message}");
+            Debug.WriteLine($"[ERROR] TryGetDefaultOutboundAction: {DescribeComError(ex)}");
             return null;
         }
         finally { Marshal.ReleaseComObject(firewallPolicy); }
@@ -88,7 +88,7 @@ public sealed class WindowsFirewallBackend : IFirewallBackend
         try { firewallPolicy = GetLocalPolicy(); }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[ERROR] SetDefaultOutboundAction: Could not open firewall policy. {ex.Message}");
+            Debug.WriteLine($"[ERROR] SetDefaultOutboundAction: {FirewallRuleUpdateErrorMapper.DescribeHResult(ex.HResult)} Details: {ex.Message}");
             return new SetDefaultOutboundActionResult { RequestedAction = requestedAction, PolicyUnavailable = true };
         }
 
@@ -106,7 +106,7 @@ public sealed class WindowsFirewallBackend : IFirewallBackend
                 try { previous = firewallPolicy.DefaultOutboundAction[profile]; }
                 catch (COMException ex)
                 {
-                    Debug.WriteLine($"[ERROR] SetDefaultOutboundAction ({profile}): Could not read current action. HResult: 0x{ex.HResult:X8}.");
+                    Debug.WriteLine($"[ERROR] SetDefaultOutboundAction ({profile}): {DescribeComError(ex)}");
                     results.Add(new ProfileActionResult { Profile = (int)profile, Succeeded = false, Error = DescribeComError(ex) });
                     continue;
                 }
@@ -120,7 +120,7 @@ public sealed class WindowsFirewallBackend : IFirewallBackend
                 try { firewallPolicy.set_DefaultOutboundAction(profile, action); }
                 catch (COMException ex)
                 {
-                    Debug.WriteLine($"[ERROR] SetDefaultOutboundAction ({profile}): Failed. HResult: 0x{ex.HResult:X8}. Message: {ex.Message}");
+                    Debug.WriteLine($"[ERROR] SetDefaultOutboundAction ({profile}): {DescribeComError(ex)} Details: {ex.Message}");
                     results.Add(new ProfileActionResult { Profile = (int)profile, Succeeded = false, PreviousAction = FirewallOutboundActionMapper.TryFromComAction(previous), Error = DescribeComError(ex) });
                     continue;
                 }
@@ -157,7 +157,7 @@ public sealed class WindowsFirewallBackend : IFirewallBackend
                     catch (COMException ex)
                     {
                         rollbackIncomplete = true;
-                        Debug.WriteLine($"[ERROR] SetDefaultOutboundAction rollback ({profile}): Failed. HResult: 0x{ex.HResult:X8}. Message: {ex.Message}");
+                        Debug.WriteLine($"[ERROR] SetDefaultOutboundAction rollback ({profile}): {DescribeComError(ex)} Details: {ex.Message}");
                     }
                 }
             }
