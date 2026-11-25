@@ -524,12 +524,9 @@ namespace MinimalFirewall
 
         private void TrayBlinkTimer_Tick(object? sender, EventArgs e)
         {
-            if (notifyIcon != null)
-            {
-                _trayBlinkState = !_trayBlinkState;
-                // alternate icons to flash
-                notifyIcon.Icon = _trayBlinkState ? _unlockedTrayIcon : _defaultTrayIcon;
-            }
+            _trayBlinkState = !_trayBlinkState;
+            // alternate icons to flash
+            _trayIconController?.SetIcon(_trayBlinkState ? _unlockedTrayIcon : _defaultTrayIcon);
         }
 
         private void UpdateTrayStatus()
@@ -558,21 +555,12 @@ namespace MinimalFirewall
                 }
             }
 
-            if (notifyIcon != null)
-            {
-                if (locked)
-                {
-                    notifyIcon.Icon = _defaultTrayIcon;
-                }
-                else if (_appSettings.AlertOnForeignRules && _mainViewModel.UnseenSystemChangesCount > 0)
-                {
-                    notifyIcon.Icon = _alertTrayIcon;
-                }
-                else
-                {
-                    notifyIcon.Icon = _unlockedTrayIcon;
-                }
-            }
+            Icon? trayIcon = locked
+                ? _defaultTrayIcon
+                : _appSettings.AlertOnForeignRules && _mainViewModel.UnseenSystemChangesCount > 0
+                    ? _alertTrayIcon
+                    : _unlockedTrayIcon;
+            _trayIconController?.SetIcon(trayIcon);
         }
 
         private void UpdateUiWithChangesCount()
