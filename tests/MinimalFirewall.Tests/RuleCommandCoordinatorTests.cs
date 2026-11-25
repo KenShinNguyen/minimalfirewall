@@ -50,14 +50,17 @@ public sealed class RuleCommandCoordinatorTests
         var coordinator = new RuleCommandCoordinator(backgroundTasks);
 
         coordinator.EnqueueApplyApplicationRule(
-            @"C:\Apps\coordinator-test.exe",
-            "Allow");
+            @"C:\Program Files\WindowsApps\Contoso.App\app.exe",
+            "Allow Outbound");
 
         await backgroundTasks.WhenIdleAsync();
 
         Assert.Contains(
-            scope.Backend.Operations,
-            operation => operation.Contains("ApplyApplicationRule", StringComparison.Ordinal));
+            scope.Backend.Rules,
+            rule => string.Equals(
+                rule.ApplicationName,
+                @"C:\Program Files\WindowsApps\Contoso.App\app.exe",
+                StringComparison.OrdinalIgnoreCase));
     }
 
     private sealed class RuleCommandCoordinatorTestScope : IDisposable
