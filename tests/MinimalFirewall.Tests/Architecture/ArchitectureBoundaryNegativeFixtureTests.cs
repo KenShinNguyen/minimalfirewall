@@ -152,6 +152,6 @@ public sealed class ArchitectureBoundaryNegativeFixtureTests
 
     private sealed class ViolatingViewModelFixture
     {
-        public Form? LeakedFormReference { get; set; }
+        public Form? LeakedFormReference;
     }
 }
