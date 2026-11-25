@@ -163,6 +163,12 @@ internal sealed class FirewallConfigTransferCoordinator
         container = null;
         failureReason = string.Empty;
 
+        if (jsonContent is null)
+        {
+            failureReason = "The firewall backup is empty.";
+            return false;
+        }
+
         if (Encoding.UTF8.GetByteCount(jsonContent) > maximumJsonBytes)
         {
             failureReason = $"The selected firewall backup exceeds the {maximumJsonBytes:N0}-byte import limit.";
