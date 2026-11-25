@@ -147,12 +147,7 @@ public sealed class ArchitectureBoundaryNegativeFixtureTests
 
     private sealed class ViolatingCoordinatorFixture
     {
-        public DummyWindowsFirewallBackend Backend { get; }
-
-        public ViolatingCoordinatorFixture(DummyWindowsFirewallBackend backend)
-        {
-            Backend = backend;
-        }
+        public DummyWindowsFirewallBackend Backend { get; } = new();
     }
 
     private sealed class ViolatingViewModelFixture
