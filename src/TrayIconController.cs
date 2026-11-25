@@ -26,6 +26,12 @@ namespace MinimalFirewall
             EventHandler exitApplication,
             CancelEventHandler menuOpening)
         {
+            ArgumentNullException.ThrowIfNull(notifyIcon);
+            ArgumentNullException.ThrowIfNull(toggleLockdown);
+            ArgumentNullException.ThrowIfNull(showWindow);
+            ArgumentNullException.ThrowIfNull(exitApplication);
+            ArgumentNullException.ThrowIfNull(menuOpening);
+
             _notifyIcon = notifyIcon;
             _showWindowHandler = showWindow;
             LockdownMenuItem = new ToolStripMenuItem("Toggle Lockdown", null, toggleLockdown);

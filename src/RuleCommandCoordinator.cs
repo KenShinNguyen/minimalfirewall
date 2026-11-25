@@ -1,3 +1,6 @@
+using System;
+using System.IO;
+
 namespace MinimalFirewall
 {
     /// <summary>
@@ -6,11 +9,18 @@ namespace MinimalFirewall
     /// </summary>
     internal sealed class RuleCommandCoordinator
     {
-        private readonly BackgroundFirewallTaskService _backgroundTaskService;
+        private readonly Action<FirewallTask> _enqueueTask;
 
         internal RuleCommandCoordinator(BackgroundFirewallTaskService backgroundTaskService)
         {
-            _backgroundTaskService = backgroundTaskService;
+            ArgumentNullException.ThrowIfNull(backgroundTaskService);
+            _enqueueTask = backgroundTaskService.EnqueueTask;
+        }
+
+        // Delegate overload keeps the command-construction contract independently testable.
+        internal RuleCommandCoordinator(Action<FirewallTask> enqueueTask)
+        {
+            _enqueueTask = enqueueTask ?? throw new ArgumentNullException(nameof(enqueueTask));
         }
 
         internal void EnqueueCreateAdvancedRule(
@@ -18,6 +28,10 @@ namespace MinimalFirewall
             string interfaceTypes,
             string icmpTypesAndCodes)
         {
+            ArgumentNullException.ThrowIfNull(viewModel);
+            ArgumentNullException.ThrowIfNull(interfaceTypes);
+            ArgumentNullException.ThrowIfNull(icmpTypesAndCodes);
+
             var payload = new CreateAdvancedRulePayload
             {
                 ViewModel = viewModel,
@@ -25,7 +39,7 @@ namespace MinimalFirewall
                 IcmpTypesAndCodes = icmpTypesAndCodes
             };
 
-            _backgroundTaskService.EnqueueTask(
+            _enqueueTask(
                 new FirewallTask(
                     FirewallTaskType.CreateAdvancedRule,
                     payload,
@@ -34,13 +48,16 @@ namespace MinimalFirewall
 
         internal void EnqueueApplyApplicationRule(string appPath, string action)
         {
+            ArgumentException.ThrowIfNullOrWhiteSpace(appPath);
+            ArgumentException.ThrowIfNullOrWhiteSpace(action);
+
             var payload = new ApplyApplicationRulePayload
             {
                 AppPaths = [appPath],
                 Action = action
             };
 
-            _backgroundTaskService.EnqueueTask(
+            _enqueueTask(
                 new FirewallTask(
                     FirewallTaskType.ApplyApplicationRule,
                     payload,

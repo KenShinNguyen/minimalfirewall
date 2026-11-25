@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Drawing;
 using System.Windows.Forms;
 using Xunit;
@@ -8,7 +9,82 @@ namespace MinimalFirewall.Tests;
 public sealed class TrayIconControllerTests
 {
     [Fact]
-    public void Constructor_WiresTrayMenuAndShowsIcon()
+    public void Constructor_RejectsNullNotifyIcon()
+    {
+        Assert.Equal(
+            "notifyIcon",
+            Assert.Throws<ArgumentNullException>(
+                () => CreateController(null!)).ParamName);
+    }
+
+    [Fact]
+    public void Constructor_RejectsEachRequiredCallback()
+    {
+        using var notifyIcon = new NotifyIcon();
+
+        Assert.Equal(
+            "toggleLockdown",
+            Assert.Throws<ArgumentNullException>(
+                () => CreateController(notifyIcon, toggleLockdown: null!)).ParamName);
+        Assert.Equal(
+            "showWindow",
+            Assert.Throws<ArgumentNullException>(
+                () => CreateController(notifyIcon, showWindow: null!)).ParamName);
+        Assert.Equal(
+            "exitApplication",
+            Assert.Throws<ArgumentNullException>(
+                () => CreateController(notifyIcon, exitApplication: null!)).ParamName);
+        Assert.Equal(
+            "menuOpening",
+            Assert.Throws<ArgumentNullException>(
+                () => CreateController(notifyIcon, menuOpening: null!)).ParamName);
+    }
+
+    [Fact]
+    public void Constructor_SetsDefaultIconTextAndThreeMenuItems()
+    {
+        using var notifyIcon = new NotifyIcon();
+        using var controller = CreateController(notifyIcon);
+
+        Assert.True(notifyIcon.Visible);
+        Assert.Equal("Minimal Firewall", notifyIcon.Text);
+        Assert.NotNull(notifyIcon.Icon);
+        Assert.NotNull(notifyIcon.ContextMenuStrip);
+        Assert.Equal(3, notifyIcon.ContextMenuStrip!.Items.Count);
+        Assert.Equal("Toggle Lockdown", notifyIcon.ContextMenuStrip.Items[0].Text);
+        Assert.Equal("Show", notifyIcon.ContextMenuStrip.Items[1].Text);
+        Assert.Equal("Exit", notifyIcon.ContextMenuStrip.Items[2].Text);
+        Assert.Same(notifyIcon.ContextMenuStrip.Items[0], controller.LockdownMenuItem);
+    }
+
+    [Fact]
+    public void SetVisible_TogglesNotifyIconVisibilityBothWays()
+    {
+        using var notifyIcon = new NotifyIcon();
+        using var controller = CreateController(notifyIcon);
+
+        controller.SetVisible(false);
+        Assert.False(notifyIcon.Visible);
+
+        controller.SetVisible(true);
+        Assert.True(notifyIcon.Visible);
+    }
+
+    [Fact]
+    public void SetIcon_UpdatesIconAndIgnoresNull()
+    {
+        using var notifyIcon = new NotifyIcon();
+        using var controller = CreateController(notifyIcon);
+
+        controller.SetIcon(SystemIcons.Warning);
+        Assert.Same(SystemIcons.Warning, notifyIcon.Icon);
+
+        controller.SetIcon(null);
+        Assert.Same(SystemIcons.Warning, notifyIcon.Icon);
+    }
+
+    [Fact]
+    public void MenuItems_InvokeOnlyTheirMatchingCallbacksOnce()
     {
         using var notifyIcon = new NotifyIcon();
         int toggleCalls = 0;
@@ -23,67 +99,64 @@ public sealed class TrayIconControllerTests
             (_, _) => exitCalls++,
             (_, _) => { });
 
-        Assert.True(notifyIcon.Visible);
-        Assert.Equal("Minimal Firewall", notifyIcon.Text);
-        Assert.NotNull(notifyIcon.ContextMenuStrip);
-        Assert.Equal(3, notifyIcon.ContextMenuStrip!.Items.Count);
-        Assert.Equal("Toggle Lockdown", controller.LockdownMenuItem.Text);
+        var menu = notifyIcon.ContextMenuStrip!;
+        ((ToolStripMenuItem)menu.Items[0]).PerformClick();
+        ((ToolStripMenuItem)menu.Items[1]).PerformClick();
+        ((ToolStripMenuItem)menu.Items[2]).PerformClick();
+
+        Assert.Equal(1, toggleCalls);
+        Assert.Equal(1, showCalls);
+        Assert.Equal(1, exitCalls);
     }
 
     [Fact]
-    public void SetVisible_AndSetIcon_UpdateNotifyIconUntilDisposed()
+    public void Dispose_HidesNotifyIconAndDetachesContextMenu()
     {
         using var notifyIcon = new NotifyIcon();
-        using var controller = new TrayIconController(
-            notifyIcon,
-            SystemIcons.Application,
-            (_, _) => { },
-            (_, _) => { },
-            (_, _) => { },
-            (_, _) => { });
-
-        controller.SetVisible(false);
-        Assert.False(notifyIcon.Visible);
-
-        controller.SetVisible(true);
-        Assert.True(notifyIcon.Visible);
-
-        controller.SetIcon(SystemIcons.Warning);
-        Assert.Equal(SystemIcons.Warning, notifyIcon.Icon);
+        var controller = CreateController(notifyIcon);
+        ContextMenuStrip menu = notifyIcon.ContextMenuStrip!;
 
         controller.Dispose();
 
         Assert.False(notifyIcon.Visible);
+        Assert.Null(notifyIcon.ContextMenuStrip);
+        Assert.True(menu.IsDisposed);
+        controller.Dispose();
+    }
+
+    [Fact]
+    public void MethodsAfterDispose_AreNoOpsAndDisposeIsIdempotent()
+    {
+        using var notifyIcon = new NotifyIcon();
+        var controller = CreateController(notifyIcon);
+        Icon originalIcon = notifyIcon.Icon!;
+
+        controller.Dispose();
+        controller.Dispose();
 
         controller.SetVisible(true);
         controller.SetIcon(SystemIcons.Error);
 
         Assert.False(notifyIcon.Visible);
-        Assert.Equal(SystemIcons.Warning, notifyIcon.Icon);
+        Assert.Same(originalIcon, notifyIcon.Icon);
+        Assert.Null(notifyIcon.ContextMenuStrip);
     }
 
-    [Fact]
-    public void Dispose_IsIdempotent_AndDetachesShowHandler()
-    {
-        using var notifyIcon = new NotifyIcon();
-        int showCalls = 0;
-
-        using var controller = new TrayIconController(
+    private static TrayIconController CreateController(
+        NotifyIcon notifyIcon,
+        EventHandler? toggleLockdown = null,
+        EventHandler? showWindow = null,
+        EventHandler? exitApplication = null,
+        CancelEventHandler? menuOpening = null)
+        => new(
             notifyIcon,
             SystemIcons.Application,
-            (_, _) => { },
-            (_, _) => showCalls++,
-            (_, _) => { },
-            (_, _) => { });
+            toggleLockdown ?? NoopEventHandler,
+            showWindow ?? NoopEventHandler,
+            exitApplication ?? NoopEventHandler,
+            menuOpening ?? NoopCancelEventHandler);
 
-        controller.Dispose();
-        controller.Dispose();
+    private static void NoopEventHandler(object? sender, EventArgs e) { }
 
-        Assert.False(notifyIcon.Visible);
-        Assert.Null(notifyIcon.ContextMenuStrip);
-        Assert.NotNull(controller.LockdownMenuItem);
-
-        notifyIcon.Dispose();
-        Assert.Equal(0, showCalls);
-    }
+    private static void NoopCancelEventHandler(object? sender, CancelEventArgs e) { }
 }
