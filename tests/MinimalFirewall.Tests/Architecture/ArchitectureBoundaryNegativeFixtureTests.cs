@@ -99,6 +99,7 @@ public sealed class ArchitectureBoundaryNegativeFixtureTests
         string source =
             "// WindowsFirewallBackend comment\r\n" +
             "/* WindowsFirewallRuleLifecycleBackend block */\r\n" +
+            "var empty = \"\";\r\n" +
             "var normal = \"WindowsFirewallBackend\";\r\n" +
             "var verbatim = @\"WindowsFirewallRuleLifecycleBackend\";\r\n" +
             "var character = '\\'';\r\n" +
