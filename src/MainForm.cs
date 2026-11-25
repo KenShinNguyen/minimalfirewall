@@ -1380,6 +1380,7 @@ namespace MinimalFirewall
 
         private void OnEventListenerStartupFailed(string message)
         {
+            EventListenerFailureDiagnostics.LogStartupFailure(AppLog.Current, message);
             _activityLogger?.LogDebug($"Event listener startup failed: {message}");
 
             SafeBeginInvoke(() =>
