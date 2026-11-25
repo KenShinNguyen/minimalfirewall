@@ -41,7 +41,7 @@ public sealed class WindowLifecycleControllerTests
     [InlineData(false, false, false, true)]
     [InlineData(true, false, true, true)]
     [InlineData(false, true, true, true)]
-    [InlineData(false, false, true, true)]
+    [InlineData(false, false, true, false)]
     public void ShouldSkipTimerCallback_BlocksDisposedOrMissingHandle(
         bool controllerDisposed,
         bool formDisposed,
