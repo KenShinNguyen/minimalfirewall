@@ -942,7 +942,7 @@ namespace MinimalFirewall
             _windowLifecycleController?.SaveWindowState();
 
             settingsControl1.SaveSettingsFromUI();
-            bool isExiting = !(_windowLifecycleController?.ShouldExit(e.CloseReason) ?? true);
+            bool isExiting = _windowLifecycleController?.ShouldExit(e.CloseReason) ?? true;
 
             if (!isExiting)
             {
