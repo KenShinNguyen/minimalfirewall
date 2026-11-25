@@ -40,10 +40,11 @@ jobs:
         if: success()
         shell: pwsh
         env:
-          # Baseline from two successful Windows runs: 12.97% lines / 10.61% branches.
-          # Keep a buffer for routine changes outside covered business paths.
-          MIN_LINE_COVERAGE: "10"
-          MIN_BRANCH_COVERAGE: "8"
+          # Baseline: main @ 28cb8b8d (CI Run #180, 298 tests, artifact coverage-cobertura-180).
+          # Measured: 21.14% lines (2,522/11,931) / 17.86% branches (1,048/5,867).
+          # Phase 6A floor: 19% lines / 15% branches; headroom: 2.14 / 2.86 points.
+          MIN_LINE_COVERAGE: "19"
+          MIN_BRANCH_COVERAGE: "15"
         run: .github/scripts/write-coverage-summary.ps1
 
       - name: Upload Cobertura coverage artifact
