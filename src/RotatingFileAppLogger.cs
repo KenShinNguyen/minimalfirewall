@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -140,18 +139,22 @@ public sealed class RotatingFileAppLogger : IAppLogger
 
     private static void AppendException(StringBuilder builder, Exception exception)
     {
-        string[] lines = exception.ToString()
+        builder.Append("  Exception: ")
+            .Append(exception.GetType().FullName)
+            .Append(" HResult=0x")
+            .Append(exception.HResult.ToString("X8", CultureInfo.InvariantCulture))
+            .Append(" Message=")
+            .AppendLine(SanitizeSingleLine(exception.Message));
+
+        string[] details = exception.ToString()
             .Replace("\r\n", "\n", StringComparison.Ordinal)
             .Replace('\r', '\n')
             .Split('\n');
 
-        builder.Append("  Exception: ")
-            .AppendLine(SanitizeSingleLine(lines[0]));
-
-        for (int index = 1; index < lines.Length; index++)
+        for (int index = 1; index < details.Length; index++)
         {
             builder.Append("    | ")
-                .AppendLine(SanitizeSingleLine(lines[index]));
+                .AppendLine(SanitizeSingleLine(details[index]));
         }
     }
 
@@ -159,7 +162,8 @@ public sealed class RotatingFileAppLogger : IAppLogger
     {
         try
         {
-            Debug.WriteLine($"[LoggerFallback] Failed to write a log entry: {exception}");
+            System.Diagnostics.Debug.WriteLine(
+                $"[LoggerFallback] Failed to write a log entry: {exception}");
         }
         catch
         {
