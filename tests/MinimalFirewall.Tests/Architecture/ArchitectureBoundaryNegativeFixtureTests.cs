@@ -150,11 +150,11 @@ public sealed class ArchitectureBoundaryNegativeFixtureTests
 
     private sealed class ViolatingCoordinatorFixture
     {
-        public DummyWindowsFirewallBackend Backend = new();
+        public DummyWindowsFirewallBackend Backend { get; } = new();
     }
 
     private sealed class ViolatingViewModelFixture
     {
-        public Form? LeakedFormReference;
+        public Form? LeakedFormReference { get; set; }
     }
 }
