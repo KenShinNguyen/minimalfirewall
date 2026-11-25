@@ -100,7 +100,7 @@ public sealed class ArchitectureBoundaryTests
         var violations = FindWindowsBackendConstructionViolations("MainForm.cs", fixture);
 
         var violation = Assert.Single(violations);
-        Assert.Contains("MainForm.cs:8", violation, StringComparison.Ordinal);
+        Assert.Contains("MainForm.cs:9", violation, StringComparison.Ordinal);
         Assert.Contains("WindowsFirewallRuleUpdateBackend", violation, StringComparison.Ordinal);
     }
 
@@ -115,9 +115,9 @@ public sealed class ArchitectureBoundaryTests
         Assert.Empty(mainFormViolations);
 
         var trayControllerCode = MaskCommentsAndLiterals(File.ReadAllText(trayControllerPath));
-        Assert.Matches(@@"\bnew\s+ContextMenuStrip\s*\(", trayControllerCode);
-        Assert.Matches(@@"\.\s*Opening\s*\+=", trayControllerCode);
-        Assert.Matches(@@"\.\s*DoubleClick\s*\+=", trayControllerCode);
+        Assert.Matches(@"\bnew\s+ContextMenuStrip\s*\(", trayControllerCode);
+        Assert.Matches(@"\.\s*Opening\s*\+=", trayControllerCode);
+        Assert.Matches(@"\.\s*DoubleClick\s*\+=", trayControllerCode);
     }
 
     [Fact]
