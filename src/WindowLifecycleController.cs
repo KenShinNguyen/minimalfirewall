@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -14,7 +15,7 @@ namespace MinimalFirewall
         private readonly Func<bool> _canRefreshRules;
         private readonly Func<Task> _refreshRules;
         private System.Threading.Timer? _autoRefreshTimer;
-        private bool _disposed;
+        private int _disposed;
 
         internal WindowLifecycleController(
             Form form,
@@ -43,27 +44,11 @@ namespace MinimalFirewall
             }
 
             var interval = TimeSpan.FromMinutes(_appSettings.AutoRefreshIntervalMinutes);
-            _autoRefreshTimer = new System.Threading.Timer(_ =>
-            {
-                if (_form.IsDisposed || !_form.IsHandleCreated)
-                {
-                    return;
-                }
-
-                try
-                {
-                    _form.Invoke(new Action(async () =>
-                    {
-                        if (_form.Visible && _canRefreshRules())
-                        {
-                            await _refreshRules();
-                        }
-                    }));
-                }
-                catch (ObjectDisposedException)
-                {
-                }
-            }, null, interval, interval);
+            _autoRefreshTimer = new System.Threading.Timer(
+                _ => _ = DispatchRefreshAsync(),
+                null,
+                interval,
+                interval);
 
             _activityLogger.LogDebug(
                 $"Auto-refresh timer set to {_appSettings.AutoRefreshIntervalMinutes} minutes.");
@@ -89,8 +74,92 @@ namespace MinimalFirewall
 
         internal void StopAutoRefreshTimer()
         {
-            _autoRefreshTimer?.Dispose();
-            _autoRefreshTimer = null;
+            var timer = Interlocked.Exchange(ref _autoRefreshTimer, null);
+            timer?.Dispose();
+        }
+
+        internal static bool ShouldSkipTimerCallback(
+            bool controllerDisposed,
+            bool formDisposed,
+            bool handleCreated)
+            => controllerDisposed || formDisposed || !handleCreated;
+
+        private async Task DispatchRefreshAsync()
+        {
+            if (ShouldSkipTimerCallback(
+                    Volatile.Read(ref _disposed) != 0,
+                    _form.IsDisposed,
+                    _form.IsHandleCreated))
+            {
+                return;
+            }
+
+            try
+            {
+                await _form.InvokeAsync(
+                    async cancellationToken =>
+                    {
+                        if (Volatile.Read(ref _disposed) != 0 ||
+                            _form.IsDisposed ||
+                            _form.Disposing ||
+                            !_form.IsHandleCreated)
+                        {
+                            return;
+                        }
+
+                        await ExecuteRefreshSafelyAsync(cancellationToken);
+                    },
+                    CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+            catch (InvalidOperationException) when (
+                Volatile.Read(ref _disposed) != 0 ||
+                _form.IsDisposed ||
+                _form.Disposing ||
+                !_form.IsHandleCreated)
+            {
+            }
+        }
+
+        internal async Task ExecuteOperationSafelyAsync(Func<Task> operation)
+        {
+            ArgumentNullException.ThrowIfNull(operation);
+
+            try
+            {
+                await operation().ConfigureAwait(true);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (ObjectDisposedException) when (
+                Volatile.Read(ref _disposed) != 0 ||
+                _form.IsDisposed ||
+                _form.Disposing)
+            {
+            }
+            catch (Exception ex)
+            {
+                _activityLogger.LogException("WindowLifecycleController.AutoRefresh", ex);
+            }
+        }
+
+        private async Task ExecuteRefreshSafelyAsync(CancellationToken cancellationToken)
+        {
+            if (cancellationToken.IsCancellationRequested ||
+                Volatile.Read(ref _disposed) != 0 ||
+                _form.IsDisposed ||
+                _form.Disposing)
+            {
+                return;
+            }
+
+            if (_form.Visible && _canRefreshRules())
+            {
+                await ExecuteOperationSafelyAsync(_refreshRules);
+            }
         }
 
         internal void ApplyLastWindowState()
@@ -125,18 +194,17 @@ namespace MinimalFirewall
 
         public void Dispose()
         {
-            if (_disposed)
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
             {
                 return;
             }
 
-            _disposed = true;
             StopAutoRefreshTimer();
         }
 
         private void ThrowIfDisposed()
         {
-            ObjectDisposedException.ThrowIf(_disposed, GetType().Name);
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, GetType().Name);
         }
     }
 }

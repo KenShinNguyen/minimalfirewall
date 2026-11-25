@@ -34,6 +34,8 @@ namespace MinimalFirewall
 
             if (disposing)
             {
+                System.Threading.Interlocked.Exchange(ref _disposed, 1);
+                DetachEventHandlers();
                 _trayBlinkTimer?.Dispose();
                 _windowLifecycleController?.Dispose();
                 _trayIconController?.Dispose();
