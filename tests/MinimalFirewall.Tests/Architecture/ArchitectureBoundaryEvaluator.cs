@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 
 namespace MinimalFirewall.Tests.Architecture;
@@ -377,6 +378,11 @@ internal static class ArchitectureBoundaryEvaluator
 
         foreach (FieldInfo field in owner.GetFields(flags))
         {
+            if (field.IsDefined(typeof(CompilerGeneratedAttribute), inherit: false))
+            {
+                continue;
+            }
+
             foreach (Type referencedType in UnwrapType(field.FieldType))
             {
                 yield return ($"field:{field.Name}", referencedType);
