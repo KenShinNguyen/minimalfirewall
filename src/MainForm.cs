@@ -370,8 +370,8 @@ namespace MinimalFirewall
                     _defaultTrayIcon = icon;
                     _unlockedTrayIcon = CreateRecoloredIcon(icon, Color.Red);
                     _alertTrayIcon = CreateRecoloredIcon(icon, Color.Orange);
-                    notifyIcon?.Icon = MainViewModel.IsLockedDown ?
-                                          _defaultTrayIcon : _unlockedTrayIcon;
+                    _trayIconController?.SetIcon(MainViewModel.IsLockedDown ?
+                        _defaultTrayIcon : _unlockedTrayIcon);
                 }
             }
 
@@ -875,6 +875,7 @@ namespace MinimalFirewall
         #region System Tray & Lifecycle
         private void SetupTrayIcon()
         {
+            notifyIcon = new NotifyIcon(components);
             _trayIconController = new TrayIconController(
                 notifyIcon,
                 Icon,
