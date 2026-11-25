@@ -231,8 +231,9 @@ internal sealed class FirewallConfigTransferCoordinator
             }
 
             bool validAction =
-                rule.Action.StartsWith("Allow", StringComparison.OrdinalIgnoreCase) ||
-                rule.Action.StartsWith("Block", StringComparison.OrdinalIgnoreCase);
+                !string.IsNullOrWhiteSpace(rule.Action) &&
+                (rule.Action.StartsWith("Allow", StringComparison.OrdinalIgnoreCase) ||
+                 rule.Action.StartsWith("Block", StringComparison.OrdinalIgnoreCase));
 
             if (string.IsNullOrWhiteSpace(rule.FolderPath) ||
                 !validAction ||

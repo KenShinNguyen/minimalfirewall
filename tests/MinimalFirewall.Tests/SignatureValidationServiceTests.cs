@@ -167,6 +167,31 @@ public sealed class SignatureValidationServiceTests
         }
     }
 
+    [Fact]
+    public void Validate_WhenSignerCertificateCannotBeExtracted_DoesNotFallBackToPublisherName()
+    {
+        string file = CreateTempFile();
+        try
+        {
+            var verifier = new FakeWinTrustVerifier { Result = true };
+            var core = new SignatureValidationCore(verifier, _ => null);
+
+            bool trusted = core.IsSignatureTrusted(
+                file,
+                ["Contoso"],
+                allowLegacyCnFallback: true,
+                out var match);
+
+            Assert.False(trusted);
+            Assert.Equal(1, verifier.Calls);
+            Assert.Equal(PublisherTrustMatchKind.NoMatch, match.MatchKind);
+        }
+        finally
+        {
+            File.Delete(file);
+        }
+    }
+
     private static string CreateTempFile()
     {
         string path = Path.Combine(Path.GetTempPath(), $"mfw-signature-{Guid.NewGuid():N}.exe");

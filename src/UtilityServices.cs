@@ -432,11 +432,15 @@ namespace MinimalFirewall
                         nameof(fileName));
                 }
 
-                bool isUncPath =
-                    (fileName.StartsWith(@"\\", StringComparison.Ordinal) &&
-                     !fileName.StartsWith(@"\\?\\", StringComparison.Ordinal)) ||
-                    fileName.StartsWith(@"\\?\\UNC\\", StringComparison.OrdinalIgnoreCase) ||
-                    fileName.StartsWith(@"\\.\\", StringComparison.Ordinal);
+                bool hasUncPrefix = fileName.Length >= 2 &&
+                    fileName[0] == '\\' && fileName[1] == '\\';
+                bool isExtendedPath = fileName.Length >= 4 &&
+                    hasUncPrefix && fileName[2] == '?' && fileName[3] == '\\';
+                bool isExtendedUnc = isExtendedPath &&
+                    fileName.AsSpan(4).StartsWith("UNC\\", StringComparison.OrdinalIgnoreCase);
+                bool isDevicePath = hasUncPrefix &&
+                    fileName.Length >= 4 && fileName[2] == '.' && fileName[3] == '\\';
+                bool isUncPath = (hasUncPrefix && !isExtendedPath) || isExtendedUnc || isDevicePath;
 
                 if (isUncPath)
                 {

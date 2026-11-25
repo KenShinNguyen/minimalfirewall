@@ -64,6 +64,57 @@ public sealed class WindowsExecutablePathTests
     }
 
     [Fact]
+    public void ResolveExecutablePath_RejectsUncAndDriveRelativePaths()
+    {
+        Assert.Throws<ArgumentException>(
+            () => ProcessHelper.ResolveExecutablePath(@"\\server\share\cmd.exe"));
+        Assert.Throws<ArgumentException>(
+            () => ProcessHelper.ResolveExecutablePath(@"C:cmd.exe"));
+    }
+
+    [Fact]
+    public void ResolveExecutablePath_PreservesFullyQualifiedExtendedLengthLocalPath()
+    {
+        const string extendedPath = @"\\?\C:\Windows\System32\cmd.exe";
+
+        string actual = ProcessHelper.ResolveExecutablePath(extendedPath);
+
+        Assert.Equal(extendedPath, actual);
+        Assert.True(Path.IsPathFullyQualified(actual));
+    }
+
+    [Fact]
+    public void RunHiddenCommand_WhenExecutableDoesNotExist_ReturnsControlledFailure()
+    {
+        string missingPath = Path.Combine(
+            Path.GetTempPath(),
+            $"mfw-missing-{Guid.NewGuid():N}.exe");
+
+        Exception? thrown = Record.Exception(
+            () => ProcessHelper.RunHiddenCommand(missingPath, string.Empty, out _, out string error));
+
+        Assert.Null(thrown);
+        ProcessHelper.RunHiddenCommand(missingPath, string.Empty, out string output, out string failure);
+        Assert.Empty(output);
+        Assert.Contains("not found", failure, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RunHiddenCommand_WhenPathExceedsLegacyMaxPath_ReturnsControlledFailure()
+    {
+        string longDirectory = new string('x', 280);
+        string longPath = Path.Combine(Path.GetTempPath(), longDirectory, "missing.exe");
+
+        Exception? thrown = Record.Exception(
+            () => ProcessHelper.RunHiddenCommand(longPath, string.Empty, out _, out _));
+
+        Assert.Null(thrown);
+        ProcessHelper.RunHiddenCommand(longPath, string.Empty, out string output, out string error);
+        Assert.Empty(output);
+        Assert.False(string.IsNullOrWhiteSpace(error));
+    }
+
+    [Fact]
     public void RunHiddenCommand_DrainsStandardOutputAndErrorConcurrently()
     {
         string commandPath = ProcessHelper.GetWindowsSystemExecutablePath("cmd.exe");
