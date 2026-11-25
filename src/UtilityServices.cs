@@ -418,6 +418,49 @@ namespace MinimalFirewall
         internal static string GetWindowsDirectoryExecutablePath(string executableName) =>
             CombineWindowsExecutablePath(Environment.GetFolderPath(Environment.SpecialFolder.Windows), executableName);
 
+        internal static string ResolveExecutablePath(string fileName)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
+
+            string resolvedPath;
+            if (Path.IsPathRooted(fileName))
+            {
+                if (!Path.IsPathFullyQualified(fileName))
+                {
+                    throw new ArgumentException(
+                        "A rooted executable path must be fully qualified.",
+                        nameof(fileName));
+                }
+
+                bool isUncPath =
+                    (fileName.StartsWith(@"\\", StringComparison.Ordinal) &&
+                     !fileName.StartsWith(@"\\?\\", StringComparison.Ordinal)) ||
+                    fileName.StartsWith(@"\\?\\UNC\\", StringComparison.OrdinalIgnoreCase) ||
+                    fileName.StartsWith(@"\\.\\", StringComparison.Ordinal);
+
+                if (isUncPath)
+                {
+                    throw new ArgumentException(
+                        "Executing a system command from a UNC or device path is not allowed.",
+                        nameof(fileName));
+                }
+
+                resolvedPath = Path.GetFullPath(fileName);
+            }
+            else
+            {
+                // Bare executable names are resolved only against the trusted Windows system directory.
+                resolvedPath = GetWindowsSystemExecutablePath(fileName);
+            }
+
+            if (!Path.IsPathFullyQualified(resolvedPath))
+            {
+                throw new InvalidOperationException("The resolved executable path is not fully qualified.");
+            }
+
+            return resolvedPath;
+        }
+
         private static string CombineWindowsExecutablePath(string directory, string executableName)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(directory);
@@ -455,27 +498,36 @@ namespace MinimalFirewall
         }
         public static void RunHiddenCommand(string fileName, string arguments, out string output, out string error)
         {
-            string safePath = Path.IsPathRooted(fileName) ? fileName : GetWindowsSystemExecutablePath(fileName);
-            Debug.WriteLine($"[ProcessHelper] Executing: {safePath} {arguments}");
-
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = safePath,
-                Arguments = arguments,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardError = true,
-                RedirectStandardOutput = true,
-                StandardOutputEncoding = Encoding.UTF8,
-                StandardErrorEncoding = Encoding.UTF8,
-            };
+            output = string.Empty;
+            error = string.Empty;
 
             try
             {
+                string safePath = ResolveExecutablePath(fileName);
+                if (!File.Exists(safePath))
+                {
+                    error = $"Executable not found or inaccessible: {Path.GetFileName(safePath)}";
+                    Debug.WriteLine($"[ProcessHelper WARN] {error}");
+                    return;
+                }
+
+                Debug.WriteLine($"[ProcessHelper] Executing: {safePath} {arguments}");
+
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = safePath,
+                    Arguments = arguments,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                    StandardErrorEncoding = Encoding.UTF8,
+                };
+
                 using var process = new Process { StartInfo = startInfo };
                 if (!process.Start())
                 {
-                    output = string.Empty;
                     error = "Failed to start process.";
                     return;
                 }
@@ -487,7 +539,9 @@ namespace MinimalFirewall
                 Task exitTask = process.WaitForExitAsync();
                 Task completionTask = Task.WhenAll(outputTask, errorTask, exitTask);
 
-                if (Task.WhenAny(completionTask, Task.Delay(TimeSpan.FromSeconds(5))).GetAwaiter().GetResult() != completionTask)
+                if (Task.WhenAny(
+                        completionTask,
+                        Task.Delay(TimeSpan.FromSeconds(5))).GetAwaiter().GetResult() != completionTask)
                 {
                     Debug.WriteLine("[ProcessHelper ERROR] Process timed out; terminating the process tree.");
                     try
@@ -497,9 +551,13 @@ namespace MinimalFirewall
                             process.Kill(entireProcessTree: true);
                         }
                     }
-                    catch (Exception killException) when (killException is InvalidOperationException or System.ComponentModel.Win32Exception or System.NotSupportedException)
+                    catch (Exception killException) when (
+                        killException is InvalidOperationException or
+                        System.ComponentModel.Win32Exception or
+                        System.NotSupportedException)
                     {
-                        Debug.WriteLine($"[ProcessHelper ERROR] Could not terminate timed-out process: {killException.Message}");
+                        Debug.WriteLine(
+                            $"[ProcessHelper ERROR] Could not terminate timed-out process: {killException.Message}");
                     }
 
                     try
@@ -512,10 +570,16 @@ namespace MinimalFirewall
                     }
 
                     Task readersTask = Task.WhenAll(outputTask, errorTask);
-                    _ = Task.WhenAny(readersTask, Task.Delay(TimeSpan.FromSeconds(1))).GetAwaiter().GetResult();
+                    _ = Task.WhenAny(
+                        readersTask,
+                        Task.Delay(TimeSpan.FromSeconds(1))).GetAwaiter().GetResult();
 
-                    output = outputTask.Status == TaskStatus.RanToCompletion ? outputTask.Result : string.Empty;
-                    string capturedError = errorTask.Status == TaskStatus.RanToCompletion ? errorTask.Result : string.Empty;
+                    output = outputTask.Status == TaskStatus.RanToCompletion
+                        ? outputTask.Result
+                        : string.Empty;
+                    string capturedError = errorTask.Status == TaskStatus.RanToCompletion
+                        ? errorTask.Result
+                        : string.Empty;
                     error = string.IsNullOrWhiteSpace(capturedError)
                         ? "Process timed out after 5 seconds."
                         : $"Process timed out after 5 seconds. {capturedError}";
