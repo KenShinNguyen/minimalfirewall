@@ -27,6 +27,7 @@ namespace MinimalFirewall
         private FirewallActionsService _actionsService = null!;
         private UserActivityLogger _activityLogger = null!;
         private MainViewModel _mainViewModel = null!;
+        private readonly FirewallConfigTransferCoordinator _transferCoordinator = new();
         private ImageList _appImageList = null!;
 
 
@@ -459,18 +460,31 @@ namespace MinimalFirewall
                 FileName = $"mfw_rules_backup_{DateTime.Now:yyyyMMdd}.json"
             };
 
-            if (saveDialog.ShowDialog() == DialogResult.OK)
+            if (saveDialog.ShowDialog() != DialogResult.OK)
             {
-                try
-                {
-                    string jsonContent = await _actionsService.ExportAllMfwRulesAsync();
-                    await File.WriteAllTextAsync(saveDialog.FileName, jsonContent);
-                    Messenger.MessageBox("All rules have been successfully exported.", "Export Complete", MessageBoxButtons.OK, MsgIcon.Success);
-                }
-                catch (Exception ex)
-                {
-                    Messenger.MessageBox($"An error occurred during export: {ex.Message}", "Export Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
+                return;
+            }
+
+            try
+            {
+                await _transferCoordinator.ExportAsync(
+                    saveDialog.FileName,
+                    _actionsService.ExportAllMfwRulesAsync);
+
+                Messenger.MessageBox(
+                    "All rules have been successfully exported.",
+                    "Export Complete",
+                    MessageBoxButtons.OK,
+                    MsgIcon.Success);
+            }
+            catch (Exception ex)
+            {
+                _activityLogger?.LogException("ExportRules", ex);
+                Messenger.MessageBox(
+                    $"An error occurred during export: {ex.Message}",
+                    "Export Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
             }
         }
 
@@ -482,56 +496,48 @@ namespace MinimalFirewall
                 Title = replace ? "Import and Replace Rules" : "Import and Add Rules"
             };
 
-            if (openDialog.ShowDialog() == DialogResult.OK)
+            if (openDialog.ShowDialog() != DialogResult.OK)
             {
-                try
+                return;
+            }
+
+            try
+            {
+                FirewallConfigImportPreview preview =
+                    await _transferCoordinator.ReadImportPreviewAsync(openDialog.FileName);
+
+                string summary =
+                    $"This file contains {preview.AdvancedRuleCount} rule(s) ({preview.AllowRuleCount} Allow) " +
+                    $"and {preview.WildcardRuleCount} wildcard rule(s)." +
+                    (replace ? "\nAll existing Minimal Firewall rules will be deleted first." : string.Empty) +
+                    "\n\nOnly import files you created yourself or fully trust — imported Allow rules open network access for the programs they list.\n\nContinue?";
+
+                var proceed = Messenger.MessageBox(
+                    summary,
+                    "Confirm Import",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning);
+                if (proceed != DialogResult.Yes)
                 {
-                    string jsonContent = await File.ReadAllTextAsync(openDialog.FileName);
-
-                    // The file is untrusted input: summarize what it will do before
-                    // touching the firewall, so a doctored "backup" can't silently
-                    // open network access.
-                    ExportContainer? container;
-                    try
-                    {
-                        container = System.Text.Json.JsonSerializer.Deserialize(jsonContent, ExportContainerJsonContext.Default.ExportContainer);
-                    }
-                    catch (System.Text.Json.JsonException)
-                    {
-                        container = null;
-                    }
-
-                    if (container == null)
-                    {
-                        Messenger.MessageBox("The selected file is not a valid Minimal Firewall rules backup.", "Import Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        return;
-                    }
-
-                    int advancedCount = container.AdvancedRules?.Count ?? 0;
-                    int allowCount = container.AdvancedRules?.Count(r => r != null && string.Equals(r.Status, "Allow", StringComparison.OrdinalIgnoreCase)) ?? 0;
-                    int wildcardCount = container.WildcardRules?.Count ?? 0;
-
-                    string summary =
-                        $"This file contains {advancedCount} rule(s) ({allowCount} Allow) and {wildcardCount} wildcard rule(s)." +
-                        (replace ? "\nAll existing Minimal Firewall rules will be deleted first." : string.Empty) +
-                        "\n\nOnly import files you created yourself or fully trust — imported Allow rules open network access for the programs they list.\n\nContinue?";
-
-                    var proceed = Messenger.MessageBox(summary, "Confirm Import", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-                    if (proceed != DialogResult.Yes)
-                    {
-                        return;
-                    }
-
-                    await _actionsService.ImportRulesAsync(jsonContent, replace);
-                    await (DataRefreshRequested?.Invoke() ?? Task.CompletedTask);
-
-                    string successMsg = replace ? "All rules have been replaced successfully." : "Rules have been successfully imported and added.";
-                    Messenger.MessageBox(successMsg, "Import Complete", MessageBoxButtons.OK, MsgIcon.Success);
+                    return;
                 }
-                catch (Exception ex)
-                {
-                    Messenger.MessageBox($"An error occurred during import: {ex.Message}", "Import Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
+
+                await _actionsService.ImportRulesAsync(preview.JsonContent, replace);
+                await (DataRefreshRequested?.Invoke() ?? Task.CompletedTask);
+
+                string successMsg = replace
+                    ? "All rules have been replaced successfully."
+                    : "Rules have been successfully imported and added.";
+                Messenger.MessageBox(successMsg, "Import Complete", MessageBoxButtons.OK, MsgIcon.Success);
+            }
+            catch (Exception ex)
+            {
+                _activityLogger?.LogException("ImportRules", ex);
+                Messenger.MessageBox(
+                    $"An error occurred during import: {ex.Message}",
+                    "Import Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
             }
         }
 
