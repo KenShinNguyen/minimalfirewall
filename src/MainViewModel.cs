@@ -28,6 +28,7 @@ namespace MinimalFirewall
         private readonly UserActivityLogger _activityLogger;
         private readonly FirewallActionsService _actionsService;
         private readonly FirewallSnapshotService _snapshotService;
+        private readonly RuleCommandCoordinator _ruleCommandCoordinator;
 
         private readonly ConcurrentDictionary<uint, (string Name, string Path, string ServiceName)> _processCache = new();
 
@@ -74,6 +75,7 @@ namespace MinimalFirewall
             _appSettings = appSettings;
             _activityLogger = activityLogger;
             _actionsService = actionsService;
+            _ruleCommandCoordinator = new RuleCommandCoordinator(_backgroundTaskService);
 
             _snapshotService = new FirewallSnapshotService();
             _uiContext = System.Threading.SynchronizationContext.Current;
@@ -126,7 +128,7 @@ namespace MinimalFirewall
         {
             ClearRulesCache();
             AllAggregatedRules.Clear();
-            VirtualRulesData.Clear();
+            VirtualRulesData = _rulesCollectionCoordinator.Clear();
             RulesListUpdated?.Invoke();
         }
 
@@ -412,37 +414,15 @@ namespace MinimalFirewall
             _dnsRefreshTimer.Change(TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(dnsInterval));
         }
 
-        private string _lastFilterSearchText = string.Empty;
-        private HashSet<RuleType> _lastFilterEnabledTypes = [];
-        private bool _lastFilterShowSystemRules;
+        private readonly RulesCollectionCoordinator _rulesCollectionCoordinator = new();
 
         public void ApplyRulesFilters(string searchText, HashSet<RuleType> enabledTypes, bool showSystemRules)
         {
-            _lastFilterSearchText = searchText;
-            _lastFilterEnabledTypes = enabledTypes;
-            _lastFilterShowSystemRules = showSystemRules;
-
-            IEnumerable<AggregatedRuleViewModel> filteredRules = AllAggregatedRules;
-
-            if (!showSystemRules)
-            {
-                filteredRules = filteredRules.Where(r => r.Grouping.EndsWith(" - MFW") || r.Type == RuleType.UWP);
-            }
-
-            if (enabledTypes.Count > 0 && enabledTypes.Count < 5)
-            {
-                filteredRules = filteredRules.Where(r => enabledTypes.Contains(r.Type));
-            }
-
-            if (!string.IsNullOrWhiteSpace(searchText))
-            {
-                filteredRules = filteredRules.Where(r =>
-                    r.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
-                    r.Description.Contains(searchText, StringComparison.OrdinalIgnoreCase) ||
-                    r.ApplicationName.Contains(searchText, StringComparison.OrdinalIgnoreCase));
-            }
-
-            VirtualRulesData = new SortableBindingList<AggregatedRuleViewModel>([.. filteredRules]);
+            VirtualRulesData = _rulesCollectionCoordinator.ApplyFilters(
+                AllAggregatedRules,
+                searchText,
+                enabledTypes,
+                showSystemRules);
             RulesListUpdated?.Invoke();
         }
 
@@ -450,9 +430,10 @@ namespace MinimalFirewall
         {
             newRule.DateAdded ??= DateTime.UtcNow;
             AllAggregatedRules.Add(newRule);
-            // Re-apply the filters the Rules tab last used — creating a rule from a
-            // popup must not silently wipe the user's search text and checkboxes.
-            ApplyRulesFilters(_lastFilterSearchText, _lastFilterEnabledTypes, _lastFilterShowSystemRules);
+            // Re-apply the filters the Rules tab last used through the coordinator,
+            // preserving the user's search text and checkboxes.
+            VirtualRulesData = _rulesCollectionCoordinator.ReapplyLastFilters(AllAggregatedRules);
+            RulesListUpdated?.Invoke();
         }
 
         private static Func<AggregatedRuleViewModel, object> GetRuleKeySelector(int columnIndex)
@@ -900,8 +881,7 @@ namespace MinimalFirewall
 
         public void CreateAdvancedRule(AdvancedRuleViewModel vm, string interfaceTypes, string icmpTypesAndCodes)
         {
-            var payload = new CreateAdvancedRulePayload { ViewModel = vm, InterfaceTypes = interfaceTypes, IcmpTypesAndCodes = icmpTypesAndCodes };
-            _backgroundTaskService.EnqueueTask(new FirewallTask(FirewallTaskType.CreateAdvancedRule, payload, $"Creating rule: {vm.Name}"));
+            _ruleCommandCoordinator.EnqueueCreateAdvancedRule(vm, interfaceTypes, icmpTypesAndCodes);
 
             var newAggregatedRule = CreateAggregatedRuleFromAdvancedRule(vm);
             AddRuleAndRefresh(newAggregatedRule);
@@ -919,8 +899,7 @@ namespace MinimalFirewall
             var newAggregatedRule = CreateStandardProgramRule(Path.GetFileName(appPath), appPath, parsedDirection, parsedAction);
             AddRuleAndRefresh(newAggregatedRule);
 
-            var payload = new ApplyApplicationRulePayload { AppPaths = [appPath], Action = action };
-            _backgroundTaskService.EnqueueTask(new FirewallTask(FirewallTaskType.ApplyApplicationRule, payload, $"Applying {action} to {Path.GetFileName(appPath)}"));
+            _ruleCommandCoordinator.EnqueueApplyApplicationRule(appPath, action);
         }
 
         private void OnBackgroundStatusChanged(string text)
