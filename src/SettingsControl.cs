@@ -479,7 +479,11 @@ namespace MinimalFirewall
             }
             catch (Exception ex)
             {
-                _activityLogger?.LogException("ExportRules", ex);
+                AppLog.Current.Error(
+                    nameof(SettingsControl),
+                    $"ExportRules failed for '{Path.GetFileName(saveDialog.FileName)}'.",
+                    ex,
+                    SafeAsyncRunner.CreateErrorId());
                 Messenger.MessageBox(
                     $"An error occurred during export: {ex.Message}",
                     "Export Error",
@@ -532,7 +536,11 @@ namespace MinimalFirewall
             }
             catch (Exception ex)
             {
-                _activityLogger?.LogException("ImportRules", ex);
+                AppLog.Current.Error(
+                    nameof(SettingsControl),
+                    $"ImportRules failed for '{Path.GetFileName(openDialog.FileName)}'.",
+                    ex,
+                    SafeAsyncRunner.CreateErrorId());
                 Messenger.MessageBox(
                     $"An error occurred during import: {ex.Message}",
                     "Import Error",

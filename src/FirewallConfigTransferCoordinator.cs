@@ -70,7 +70,11 @@ internal sealed class FirewallConfigTransferCoordinator
                 $"The selected firewall backup exceeds the {_maximumImportFileBytes:N0}-byte import limit.");
         }
 
-        if (!TryDeserializeAndValidate(jsonContent, out ExportContainer? container, out string failureReason))
+        if (!TryDeserializeAndValidate(
+                jsonContent,
+                out ExportContainer? container,
+                out string failureReason,
+                _maximumImportFileBytes))
         {
             throw new InvalidDataException(failureReason);
         }
@@ -153,7 +157,8 @@ internal sealed class FirewallConfigTransferCoordinator
     internal static bool TryDeserializeAndValidate(
         string? jsonContent,
         out ExportContainer? container,
-        out string failureReason)
+        out string failureReason,
+        long maximumJsonBytes = DefaultMaximumImportFileBytes)
     {
         container = null;
         failureReason = string.Empty;
@@ -161,6 +166,12 @@ internal sealed class FirewallConfigTransferCoordinator
         if (string.IsNullOrWhiteSpace(jsonContent))
         {
             failureReason = "The firewall backup is empty.";
+            return false;
+        }
+
+        if (Encoding.UTF8.GetByteCount(jsonContent) > maximumJsonBytes)
+        {
+            failureReason = $"The selected firewall backup exceeds the {maximumJsonBytes:N0}-byte import limit.";
             return false;
         }
 

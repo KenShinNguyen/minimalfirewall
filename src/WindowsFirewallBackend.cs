@@ -26,7 +26,6 @@ public sealed class WindowsFirewallBackend : IFirewallBackend
             SetDefaultOutboundActionCore(action),
             action);
 
-    private const int E_ACCESSDENIED = unchecked((int)0x80070005);
     private static readonly Type? _firewallPolicyType = Type.GetTypeFromProgID("HNetCfg.FwPolicy2");
 
     private static readonly NET_FW_PROFILE_TYPE2_[] AllProfiles =

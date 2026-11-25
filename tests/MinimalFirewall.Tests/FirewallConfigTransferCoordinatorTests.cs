@@ -35,6 +35,22 @@ public sealed class FirewallConfigTransferCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public void TryDeserializeAndValidate_RejectsOversizedJsonBeforeParsing()
+    {
+        string oversized = new string(' ', 33);
+
+        bool valid = FirewallConfigTransferCoordinator.TryDeserializeAndValidate(
+            oversized,
+            out ExportContainer? result,
+            out string failureReason,
+            maximumJsonBytes: 32);
+
+        Assert.False(valid);
+        Assert.Null(result);
+        Assert.Contains("32-byte", failureReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void TryDeserializeAndValidate_InvalidRuleFields_RejectsWholePayload()
     {
         var invalid = new ExportContainer

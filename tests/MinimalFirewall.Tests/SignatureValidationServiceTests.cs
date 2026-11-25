@@ -23,6 +23,24 @@ public sealed class SignatureValidationServiceTests
         Assert.Equal(0, verifier.Calls);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Validate_WhenPathIsBlank_DoesNotCallWinTrust(string filePath)
+    {
+        var verifier = new FakeWinTrustVerifier { Result = true };
+        var core = new SignatureValidationCore(verifier, _ => null);
+
+        bool trusted = core.IsSignatureTrusted(
+            filePath,
+            [],
+            allowLegacyCnFallback: false,
+            out _);
+
+        Assert.False(trusted);
+        Assert.Equal(0, verifier.Calls);
+    }
+
     [Fact]
     public void Validate_PassesWholeChainRevocationAndChainFlagsToWinTrustVerifier()
     {

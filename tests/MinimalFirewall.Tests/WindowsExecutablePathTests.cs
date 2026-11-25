@@ -91,10 +91,9 @@ public sealed class WindowsExecutablePathTests
             $"mfw-missing-{Guid.NewGuid():N}.exe");
 
         Exception? thrown = Record.Exception(
-            () => ProcessHelper.RunHiddenCommand(missingPath, string.Empty, out _, out string error));
+            () => ProcessHelper.RunHiddenCommand(missingPath, string.Empty, out string output, out string failure));
 
         Assert.Null(thrown);
-        ProcessHelper.RunHiddenCommand(missingPath, string.Empty, out string output, out string failure);
         Assert.Empty(output);
         Assert.Contains("not found", failure, StringComparison.OrdinalIgnoreCase);
     }
@@ -106,10 +105,9 @@ public sealed class WindowsExecutablePathTests
         string longPath = Path.Combine(Path.GetTempPath(), longDirectory, "missing.exe");
 
         Exception? thrown = Record.Exception(
-            () => ProcessHelper.RunHiddenCommand(longPath, string.Empty, out _, out _));
+            () => ProcessHelper.RunHiddenCommand(longPath, string.Empty, out string output, out string error));
 
         Assert.Null(thrown);
-        ProcessHelper.RunHiddenCommand(longPath, string.Empty, out string output, out string error);
         Assert.Empty(output);
         Assert.False(string.IsNullOrWhiteSpace(error));
     }
