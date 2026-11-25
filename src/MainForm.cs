@@ -1527,8 +1527,13 @@ namespace MinimalFirewall
 
         private bool IsDarkModeEnabled => _appSettings.IsEffectiveDarkTheme;
 
+        internal static bool ShouldSkipUiInvoke(bool teardownInProgress, bool handleCreated)
+            => teardownInProgress || !handleCreated;
+
         private bool IsTeardownInProgress()
-            => Volatile.Read(ref _disposed) != 0 || Disposing || IsDisposed;
+            => ShouldSkipUiInvoke(
+                Volatile.Read(ref _disposed) != 0 || Disposing || IsDisposed,
+                IsHandleCreated);
 
         private bool SafeInvoke(Action action)
         {
