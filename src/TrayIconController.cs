@@ -1,0 +1,68 @@
+using System;
+using System.ComponentModel;
+using System.Drawing;
+using System.Windows.Forms;
+
+namespace MinimalFirewall
+{
+    /// <summary>
+    /// Phase 5C UI seam for system-tray wiring. MainForm retains lifecycle policy
+    /// while this controller owns tray menu construction and event hookups.
+    /// </summary>
+    internal sealed class TrayIconController : IDisposable
+    {
+        private readonly NotifyIcon _notifyIcon;
+        private readonly ContextMenuStrip _contextMenu;
+        private bool _disposed;
+
+        internal ToolStripMenuItem LockdownMenuItem { get; }
+
+        internal TrayIconController(
+            NotifyIcon notifyIcon,
+            Icon? icon,
+            EventHandler toggleLockdown,
+            EventHandler showWindow,
+            EventHandler exitApplication,
+            CancelEventHandler menuOpening)
+        {
+            _notifyIcon = notifyIcon;
+            LockdownMenuItem = new ToolStripMenuItem("Toggle Lockdown", null, toggleLockdown);
+
+            _contextMenu = new ContextMenuStrip();
+            _contextMenu.Items.Add(LockdownMenuItem);
+            _contextMenu.Items.Add(new ToolStripMenuItem("Show", null, showWindow));
+            _contextMenu.Items.Add(new ToolStripMenuItem("Exit", null, exitApplication));
+            _contextMenu.Opening += menuOpening;
+
+            _notifyIcon.Icon = icon;
+            _notifyIcon.Text = "Minimal Firewall";
+            _notifyIcon.Visible = true;
+            _notifyIcon.ContextMenuStrip = _contextMenu;
+            _notifyIcon.DoubleClick += showWindow;
+        }
+
+        internal void SetIcon(Icon? icon)
+        {
+            if (!_disposed && icon is not null)
+            {
+                _notifyIcon.Icon = icon;
+            }
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            _notifyIcon.DoubleClick -= _notifyIcon_DoubleClick;
+            _contextMenu.Dispose();
+        }
+
+        private void _notifyIcon_DoubleClick(object? sender, EventArgs e)
+        {
+        }
+    }
+}
