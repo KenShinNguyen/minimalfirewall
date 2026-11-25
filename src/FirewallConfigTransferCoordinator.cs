@@ -163,15 +163,15 @@ internal sealed class FirewallConfigTransferCoordinator
         container = null;
         failureReason = string.Empty;
 
-        if (string.IsNullOrWhiteSpace(jsonContent))
-        {
-            failureReason = "The firewall backup is empty.";
-            return false;
-        }
-
         if (Encoding.UTF8.GetByteCount(jsonContent) > maximumJsonBytes)
         {
             failureReason = $"The selected firewall backup exceeds the {maximumJsonBytes:N0}-byte import limit.";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(jsonContent))
+        {
+            failureReason = "The firewall backup is empty.";
             return false;
         }
 
@@ -214,6 +214,13 @@ internal sealed class FirewallConfigTransferCoordinator
                 failureReason = $"Advanced rule #{index + 1} is empty.";
                 container = null;
                 return false;
+            }
+
+            // Older exported backups may omit Status. The existing rule-creation path
+            // treated any non-Allow value as Block; make that legacy behavior explicit and fail-closed.
+            if (string.IsNullOrWhiteSpace(rule.Status))
+            {
+                rule.Status = "Block";
             }
 
             int direction = (int)rule.Direction;
