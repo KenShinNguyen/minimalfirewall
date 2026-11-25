@@ -102,6 +102,8 @@ public sealed class ArchitectureBoundaryNegativeFixtureTests
             "var empty = \"\";\r\n" +
             "var normal = \"WindowsFirewallBackend\";\r\n" +
             "var verbatim = @\"WindowsFirewallRuleLifecycleBackend\";\r\n" +
+            "var verbatimQuote = @\"\"\"\";\r\n" +
+            "var raw = \"\"\"WindowsFirewallBackend\"\"\";\r\n" +
             "var character = '\\'';\r\n" +
             "var realReference = new WindowsFirewallBackend();\r\n";
 
