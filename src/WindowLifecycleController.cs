@@ -102,7 +102,6 @@ namespace MinimalFirewall
                         if (Volatile.Read(ref _disposed) != 0 ||
                             _form.IsDisposed ||
                             _form.Disposing ||
-                            !cancellationToken.IsCancellationRequested &&
                             !_form.IsHandleCreated)
                         {
                             return;
