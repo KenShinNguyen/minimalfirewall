@@ -25,19 +25,43 @@ public sealed class TrayIconControllerTests
         Assert.Equal(
             "toggleLockdown",
             Assert.Throws<ArgumentNullException>(
-                () => CreateController(notifyIcon, toggleLockdown: null!)).ParamName);
+                () => new TrayIconController(
+                    notifyIcon,
+                    SystemIcons.Application,
+                    null!,
+                    NoopEventHandler,
+                    NoopEventHandler,
+                    NoopCancelEventHandler)).ParamName);
         Assert.Equal(
             "showWindow",
             Assert.Throws<ArgumentNullException>(
-                () => CreateController(notifyIcon, showWindow: null!)).ParamName);
+                () => new TrayIconController(
+                    notifyIcon,
+                    SystemIcons.Application,
+                    NoopEventHandler,
+                    null!,
+                    NoopEventHandler,
+                    NoopCancelEventHandler)).ParamName);
         Assert.Equal(
             "exitApplication",
             Assert.Throws<ArgumentNullException>(
-                () => CreateController(notifyIcon, exitApplication: null!)).ParamName);
+                () => new TrayIconController(
+                    notifyIcon,
+                    SystemIcons.Application,
+                    NoopEventHandler,
+                    NoopEventHandler,
+                    null!,
+                    NoopCancelEventHandler)).ParamName);
         Assert.Equal(
             "menuOpening",
             Assert.Throws<ArgumentNullException>(
-                () => CreateController(notifyIcon, menuOpening: null!)).ParamName);
+                () => new TrayIconController(
+                    notifyIcon,
+                    SystemIcons.Application,
+                    NoopEventHandler,
+                    NoopEventHandler,
+                    NoopEventHandler,
+                    null!)).ParamName);
     }
 
     [Fact]
@@ -142,19 +166,14 @@ public sealed class TrayIconControllerTests
         Assert.Null(notifyIcon.ContextMenuStrip);
     }
 
-    private static TrayIconController CreateController(
-        NotifyIcon notifyIcon,
-        EventHandler? toggleLockdown = null,
-        EventHandler? showWindow = null,
-        EventHandler? exitApplication = null,
-        CancelEventHandler? menuOpening = null)
+    private static TrayIconController CreateController(NotifyIcon notifyIcon)
         => new(
             notifyIcon,
             SystemIcons.Application,
-            toggleLockdown ?? NoopEventHandler,
-            showWindow ?? NoopEventHandler,
-            exitApplication ?? NoopEventHandler,
-            menuOpening ?? NoopCancelEventHandler);
+            NoopEventHandler,
+            NoopEventHandler,
+            NoopEventHandler,
+            NoopCancelEventHandler);
 
     private static void NoopEventHandler(object? sender, EventArgs e) { }
 
