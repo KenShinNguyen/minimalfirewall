@@ -19,4 +19,17 @@ public sealed class WindowLifecycleControllerTests
 
         Assert.Equal(expected, actual);
     }
+
+    [Theory]
+    [InlineData(FormWindowState.Minimized, FormWindowState.Normal)]
+    [InlineData(FormWindowState.Normal, FormWindowState.Normal)]
+    [InlineData(FormWindowState.Maximized, FormWindowState.Maximized)]
+    public void NormalizeSavedWindowState_DoesNotRestoreMinimizedWindow(
+        FormWindowState savedState,
+        FormWindowState expected)
+    {
+        FormWindowState actual = WindowLifecycleController.NormalizeSavedWindowState(savedState);
+
+        Assert.Equal(expected, actual);
+    }
 }
