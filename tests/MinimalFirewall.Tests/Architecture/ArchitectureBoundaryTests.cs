@@ -65,6 +65,18 @@ public sealed class ArchitectureBoundaryTests
                 @"^\s*private\s+readonly\s+IFirewallRuleQueryBackend\s+_ruleQueryBackend\s*=.*new\s+WindowsFirewallRuleQueryBackend\s*\(\s*\)\s*;\s*$",
                 @"^\s*private\s+readonly\s+IFirewallRuleCreationBackend\s+_ruleCreationBackend\s*=.*new\s+WindowsFirewallRuleCreationBackend\s*\(\s*\)\s*;\s*$",
                 @"^\s*private\s+readonly\s+RuleMutationCoordinator\s+_ruleMutationCoordinator\s*=.*new\s+WindowsFirewallRuleCreationBackend\s*\(\s*\).*;\s*$"
+            ],
+            ["FirewallGroups.cs"] =
+            [
+                @"^\s*_backend\s*=\s*backend\s*\?\?\s*new\s+WindowsFirewallRuleGroupBackend\s*\(\s*\)\s*;\s*$"
+            ],
+            ["FirewallSentryService.cs"] =
+            [
+                @"^\s*:\s*this\s*\(\s*new\s+WindowsFirewallRuleObservationBackend\s*\(\s*\)\s*\)\s*$"
+            ],
+            ["UtilityServices.cs"] =
+            [
+                @"^\s*ResetFirewall\s*\(\s*new\s+WindowsFirewallPolicyAdminBackend\s*\(\s*\)\s*\)\s*;\s*$"
             ]
         };
 
