@@ -11,15 +11,12 @@ namespace MinimalFirewall.Tests;
 public sealed class RuleCommandCoordinatorTests
 {
     [Fact]
-    public void Constructor_RejectsNullDependencies()
+    public void DelegateConstructor_RejectsNullEnqueueCallback()
     {
-        var serviceException = Assert.Throws<ArgumentNullException>(
-            () => new RuleCommandCoordinator((BackgroundFirewallTaskService)null!));
-        Assert.Equal("backgroundTaskService", serviceException.ParamName);
-
-        var enqueueException = Assert.Throws<ArgumentNullException>(
+        var exception = Assert.Throws<ArgumentNullException>(
             () => new RuleCommandCoordinator((Action<FirewallTask>)null!));
-        Assert.Equal("enqueueTask", enqueueException.ParamName);
+
+        Assert.Equal("enqueueTask", exception.ParamName);
     }
 
     [Fact]
@@ -74,7 +71,7 @@ public sealed class RuleCommandCoordinatorTests
 
         Assert.Equal(
             "appPath",
-            Assert.Throws<ArgumentException>(
+            Assert.Throws<ArgumentNullException>(
                 () => coordinator.EnqueueApplyApplicationRule(null!, "Allow")).ParamName);
         Assert.Equal(
             "appPath",
@@ -97,7 +94,7 @@ public sealed class RuleCommandCoordinatorTests
 
         Assert.Equal(
             "action",
-            Assert.Throws<ArgumentException>(
+            Assert.Throws<ArgumentNullException>(
                 () => coordinator.EnqueueApplyApplicationRule(appPath, null!)).ParamName);
         Assert.Equal(
             "action",

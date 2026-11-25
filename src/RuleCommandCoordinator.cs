@@ -13,8 +13,9 @@ namespace MinimalFirewall
 
         internal RuleCommandCoordinator(BackgroundFirewallTaskService backgroundTaskService)
         {
-            ArgumentNullException.ThrowIfNull(backgroundTaskService);
-            _enqueueTask = backgroundTaskService.EnqueueTask;
+            // Keep the service dereference deferred. MainViewModel can be created without
+            // background services for view-only/test scenarios, matching the prior contract.
+            _enqueueTask = task => backgroundTaskService.EnqueueTask(task);
         }
 
         // Delegate overload keeps the command-construction contract independently testable.
