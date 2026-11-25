@@ -56,6 +56,7 @@ namespace MinimalFirewall
         private bool _isRefreshingData = false;
         private bool _isSentryServiceStarted = false;
         private readonly bool _startMinimized;
+        private TrayIconController? _trayIconController;
         private StatusForm? _auditStatusForm = null;
         private CancellationTokenSource? _scanCts = null;
         private System.Windows.Forms.Timer? _trayBlinkTimer;
@@ -874,20 +875,14 @@ namespace MinimalFirewall
         #region System Tray & Lifecycle
         private void SetupTrayIcon()
         {
-            lockdownTrayMenuItem = new ToolStripMenuItem("Toggle Lockdown", null, ToggleLockdownTrayMenuItem_Click);
-            var contextMenu = new ContextMenuStrip();
-            contextMenu.Items.Add(lockdownTrayMenuItem);
-            contextMenu.Items.Add(new ToolStripMenuItem("Show", null, ShowWindow));
-            contextMenu.Items.Add(new ToolStripMenuItem("Exit", null, ExitApplication));
-            contextMenu.Opening += TrayContextMenu_Opening;
-            notifyIcon = new NotifyIcon(components)
-            {
-                Icon = Icon,
-                Text = "Minimal Firewall",
-                Visible = true,
-                ContextMenuStrip = contextMenu
-            };
-            notifyIcon.DoubleClick += ShowWindow;
+            _trayIconController = new TrayIconController(
+                notifyIcon,
+                Icon,
+                ToggleLockdownTrayMenuItem_Click,
+                ShowWindow,
+                ExitApplication,
+                TrayContextMenu_Opening);
+            lockdownTrayMenuItem = _trayIconController.LockdownMenuItem;
         }
 
         private void ToggleLockdownTrayMenuItem_Click(object? sender, EventArgs e)
