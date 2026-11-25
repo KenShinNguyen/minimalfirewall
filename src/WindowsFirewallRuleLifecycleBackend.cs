@@ -141,7 +141,7 @@ public static void DeleteRulesByName(List<string> ruleNames)
                     }
                     catch (COMException ex)
                     {
-                        Debug.WriteLine($"[ERROR] DeleteRulesByName ('{name}'): Failed. HResult: 0x{ex.HResult:X8}. Message: {ex.Message}");
+                        Debug.WriteLine($"[ERROR] DeleteRulesByName ('{name}'): {FirewallRuleUpdateErrorMapper.DescribeHResult(ex.HResult)} Details: {ex.Message}");
                         if (ex.HResult == E_ACCESSDENIED)
                         {
                             Debug.WriteLine($"[ERROR] DeleteRulesByName ('{name}'): Access Denied.");
@@ -243,7 +243,7 @@ private static void SetRuleEnabledState(string ruleName, bool isEnabled, string 
             }
             catch (COMException ex)
             {
-                Debug.WriteLine($"[ERROR] {callerName} ('{ruleName}'): Failed. HResult: 0x{ex.HResult:X8}. Message: {ex.Message}");
+                Debug.WriteLine($"[ERROR] {callerName} ('{ruleName}'): {FirewallRuleUpdateErrorMapper.DescribeHResult(ex.HResult)} Details: {ex.Message}");
             }
             finally
             {
@@ -321,12 +321,12 @@ private static void SetRuleEnabledState(string ruleName, bool isEnabled, string 
         catch (COMException ex)
         {
             return FirewallRuleLifecycleOperationResult.Failure(
-                $"{operationName} failed with HRESULT 0x{ex.HResult:X8}: {ex.Message}", ex);
+                $"{operationName} failed. {FirewallRuleUpdateErrorMapper.DescribeHResult(ex.HResult)} Details: {ex.Message}", ex);
         }
         catch (UnauthorizedAccessException ex)
         {
             return FirewallRuleLifecycleOperationResult.Failure(
-                $"{operationName} failed with HRESULT 0x{ex.HResult:X8}: {ex.Message}", ex);
+                $"{operationName} failed. {FirewallRuleUpdateErrorMapper.DescribeHResult(ex.HResult)} Details: {ex.Message}", ex);
         }
         catch (InvalidOperationException ex)
         {
