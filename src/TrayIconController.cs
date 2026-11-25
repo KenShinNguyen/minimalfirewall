@@ -51,6 +51,14 @@ namespace MinimalFirewall
             }
         }
 
+        internal void SetVisible(bool visible)
+        {
+            if (!_disposed)
+            {
+                _notifyIcon.Visible = visible;
+            }
+        }
+
         public void Dispose()
         {
             if (_disposed)
@@ -59,7 +67,9 @@ namespace MinimalFirewall
             }
 
             _disposed = true;
+            _notifyIcon.Visible = false;
             _notifyIcon.DoubleClick -= _showWindowHandler;
+            _notifyIcon.ContextMenuStrip = null;
             _contextMenu.Dispose();
         }
     }
