@@ -28,6 +28,7 @@ namespace MinimalFirewall
         private readonly UserActivityLogger _activityLogger;
         private readonly FirewallActionsService _actionsService;
         private readonly FirewallSnapshotService _snapshotService;
+        private readonly RuleCommandCoordinator _ruleCommandCoordinator;
 
         private readonly ConcurrentDictionary<uint, (string Name, string Path, string ServiceName)> _processCache = new();
 
@@ -74,6 +75,7 @@ namespace MinimalFirewall
             _appSettings = appSettings;
             _activityLogger = activityLogger;
             _actionsService = actionsService;
+            _ruleCommandCoordinator = new RuleCommandCoordinator(_backgroundTaskService);
 
             _snapshotService = new FirewallSnapshotService();
             _uiContext = System.Threading.SynchronizationContext.Current;
@@ -879,8 +881,7 @@ namespace MinimalFirewall
 
         public void CreateAdvancedRule(AdvancedRuleViewModel vm, string interfaceTypes, string icmpTypesAndCodes)
         {
-            var payload = new CreateAdvancedRulePayload { ViewModel = vm, InterfaceTypes = interfaceTypes, IcmpTypesAndCodes = icmpTypesAndCodes };
-            _backgroundTaskService.EnqueueTask(new FirewallTask(FirewallTaskType.CreateAdvancedRule, payload, $"Creating rule: {vm.Name}"));
+            _ruleCommandCoordinator.EnqueueCreateAdvancedRule(vm, interfaceTypes, icmpTypesAndCodes);
 
             var newAggregatedRule = CreateAggregatedRuleFromAdvancedRule(vm);
             AddRuleAndRefresh(newAggregatedRule);
@@ -898,8 +899,7 @@ namespace MinimalFirewall
             var newAggregatedRule = CreateStandardProgramRule(Path.GetFileName(appPath), appPath, parsedDirection, parsedAction);
             AddRuleAndRefresh(newAggregatedRule);
 
-            var payload = new ApplyApplicationRulePayload { AppPaths = [appPath], Action = action };
-            _backgroundTaskService.EnqueueTask(new FirewallTask(FirewallTaskType.ApplyApplicationRule, payload, $"Applying {action} to {Path.GetFileName(appPath)}"));
+            _ruleCommandCoordinator.EnqueueApplyApplicationRule(appPath, action);
         }
 
         private void OnBackgroundStatusChanged(string text)
