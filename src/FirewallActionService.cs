@@ -37,6 +37,7 @@ namespace MinimalFirewall
         private readonly IFirewallRuleLifecycleBackend _ruleLifecycleBackend = ruleLifecycleBackend ?? new WindowsFirewallRuleLifecycleBackend();
         private readonly IFirewallRuleQueryBackend _ruleQueryBackend = ruleQueryBackend ?? new WindowsFirewallRuleQueryBackend();
         private readonly IFirewallRuleCreationBackend _ruleCreationBackend = ruleCreationBackend ?? new WindowsFirewallRuleCreationBackend();
+        private readonly RuleMutationCoordinator _ruleMutationCoordinator = new(ruleCreationBackend ?? new WindowsFirewallRuleCreationBackend(), activityLogger);
 
         // Timer cleanup management
         private readonly ConcurrentDictionary<string, System.Threading.Timer> _temporaryRuleTimers = new();
@@ -366,24 +367,7 @@ namespace MinimalFirewall
             IReadOnlyList<string> items,
             Func<IReadOnlyList<string>, FirewallRuleLifecycleOperationResult> deleteAction,
             string logPrefix)
-        {
-            if (items.Count == 0)
-            {
-                return;
-            }
-
-            var result = deleteAction(items);
-            if (!result.Succeeded)
-            {
-                LogLifecycleFailure(result, $"Delete{logPrefix.Replace(" ", "")}s failed for {string.Join(",", items)}.");
-                return;
-            }
-
-            foreach (var item in items)
-            {
-                activityLogger.LogChange($"{logPrefix} Deleted", item);
-            }
-        }
+            => _ruleMutationCoordinator.ExecuteRuleDeletion(items, deleteAction, logPrefix);
 
         public void DeleteApplicationRules(List<string> appPaths) =>
             ExecuteRuleDeletion(appPaths, _ruleLifecycleBackend.DeleteByPath, "Rule");
@@ -1067,34 +1051,7 @@ namespace MinimalFirewall
         }
 
         private void CreateSingleAdvancedRule(AdvancedRuleViewModel vm, string interfaceTypes, string icmpTypesAndCodes)
-        {
-            var definition = FirewallRuleCreationMapper.FromViewModel(vm, interfaceTypes, icmpTypesAndCodes);
-            var result = _ruleCreationBackend.CreateRule(definition);
-
-            if (result.Succeeded)
-            {
-                activityLogger.LogChange("Advanced Rule Created", vm.Name);
-                return;
-            }
-
-            if (result.Exception is not null)
-            {
-                activityLogger.LogException(
-                    $"CreateSingleAdvancedRule failed for '{vm.Name}'",
-                    result.Exception);
-            }
-            else
-            {
-                activityLogger.LogDebug(
-                    $"CreateSingleAdvancedRule failed for '{vm.Name}': {result.Error}");
-            }
-
-            throw new InvalidOperationException(
-                string.IsNullOrWhiteSpace(result.Error)
-                    ? "Firewall rule creation failed."
-                    : result.Error,
-                result.Exception);
-        }
+            => _ruleMutationCoordinator.CreateSingleAdvancedRule(vm, interfaceTypes, icmpTypesAndCodes);
 
         public static bool ParseActionString(string action, out Actions parsedAction, out Directions parsedDirection)
         {
