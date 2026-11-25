@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -68,6 +69,32 @@ namespace MinimalFirewall
                 $"Auto-refresh timer set to {_appSettings.AutoRefreshIntervalMinutes} minutes.");
         }
 
+        internal void SaveWindowState()
+        {
+            ThrowIfDisposed();
+
+            bool isNormal = _form.WindowState == FormWindowState.Normal;
+            _appSettings.WindowLocation = isNormal ? _form.Location : _form.RestoreBounds.Location;
+            _appSettings.WindowSize = isNormal ? _form.Size : _form.RestoreBounds.Size;
+            _appSettings.WindowState = _form.WindowState == FormWindowState.Maximized
+                ? (int)FormWindowState.Maximized
+                : (int)FormWindowState.Normal;
+        }
+
+        internal bool ShouldExit(CloseReason closeReason)
+            => !_appSettings.CloseToTray || closeReason != CloseReason.UserClosing;
+
+        internal void StopAutoRefreshTimer()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _autoRefreshTimer?.Dispose();
+            _autoRefreshTimer = null;
+        }
+
         internal void ApplyLastWindowState()
         {
             ThrowIfDisposed();
@@ -106,8 +133,7 @@ namespace MinimalFirewall
             }
 
             _disposed = true;
-            _autoRefreshTimer?.Dispose();
-            _autoRefreshTimer = null;
+            StopAutoRefreshTimer();
         }
 
         private void ThrowIfDisposed()
