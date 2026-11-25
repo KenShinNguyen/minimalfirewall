@@ -124,22 +124,13 @@ namespace MinimalFirewall
             }
         }
 
-        private async Task ExecuteRefreshSafelyAsync(CancellationToken cancellationToken)
+        internal async Task ExecuteOperationSafelyAsync(Func<Task> operation)
         {
-            if (cancellationToken.IsCancellationRequested ||
-                Volatile.Read(ref _disposed) != 0 ||
-                _form.IsDisposed ||
-                _form.Disposing)
-            {
-                return;
-            }
+            ArgumentNullException.ThrowIfNull(operation);
 
             try
             {
-                if (_form.Visible && _canRefreshRules())
-                {
-                    await _refreshRules().ConfigureAwait(true);
-                }
+                await operation().ConfigureAwait(true);
             }
             catch (OperationCanceledException)
             {
@@ -153,6 +144,22 @@ namespace MinimalFirewall
             catch (Exception ex)
             {
                 _activityLogger.LogException("WindowLifecycleController.AutoRefresh", ex);
+            }
+        }
+
+        private async Task ExecuteRefreshSafelyAsync(CancellationToken cancellationToken)
+        {
+            if (cancellationToken.IsCancellationRequested ||
+                Volatile.Read(ref _disposed) != 0 ||
+                _form.IsDisposed ||
+                _form.Disposing)
+            {
+                return;
+            }
+
+            if (_form.Visible && _canRefreshRules())
+            {
+                await ExecuteOperationSafelyAsync(_refreshRules);
             }
         }
 
